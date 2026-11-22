@@ -5,8 +5,8 @@
 <h1 align="center">OneLiquid</h1>
 
 <p align="center">
-  <strong>iOS 26 Clear Liquid Glass Icon Pack &amp; LSPosed Module for Samsung One UI (8 / 8.5 / 9+)</strong><br/>
-  1,020+ solid-filled translucent frosted-glass icons with Apple continuous-squircle geometry, Fresnel specular rims, plus an optional built-in LSPosed module for live backdrop blur, AGSL refraction, floating Glass Dock &amp; Glass Folders — all in one APK.
+  <strong>iOS 26 / 27 Clear Liquid Glass Icon Pack &amp; LSPosed Module for Samsung One UI (8 / 8.5 / 9+)</strong><br/>
+  1,020+ solid-filled translucent frosted-glass icons with Apple continuous-squircle geometry, plus an optional built-in LSPosed module for true 120fps GPU AGSL live wallpaper refraction, convex lens magnification, chromatic dispersion, and gyroscope tilt caustics — all in one APK.
 </p>
 
 ---
@@ -16,10 +16,10 @@
 - **1:1 iOS 26 Clear Liquid Glass Aesthetic** — Calibrated against Apple's official iOS 26 Clear Home Screen: pure-white top-to-bottom translucent frosted glyphs, crystal-clear glass body so your wallpaper shines through, and razor-crisp anisotropic Fresnel specular rim catchlights (top-left `-135°` & bottom-right `+45°`).
 - **1,020+ Solid-Filled Liquid Glass Icons** — Full coverage of mainstream & niche Android apps (mapped across 2,700+ `ComponentInfo` activities in `appfilter.xml`), combining bespoke iOS 26 Clear system icons, optically normalized stock glyphs, and 900+ **solid-filled** official brand vectors from [Simple Icons](https://simpleicons.org/).
 - **Continuous Squircle Geometry** — Supersampled (`512×512` → `192×192`) smooth continuous squircle (`n = 4.50`) with exact Euclidean SDF normals and unified optical visual-weight scaling.
-- **Built-In LSPosed Module (One UI 8 / 8.5 / 9+)** — Distributed inside the exact same `OneLiquid.apk` with an in-app **ON / OFF master toggle**, individual feature switches, **live 6-point status checklist** (with real IPC scope pings), and **Restart SystemUI / Restart One UI Home** controls:
-  - **1:1 Live Clear Icons**: Applies all 1,020 OneLiquid icons + auto-converts any unthemed app on the fly in HoneySpace (`com.sec.android.app.launcher`).
-  - **Live Backdrop Blur & AGSL Refraction**: Uses Samsung's native `SemBlurInfo` hardware backdrop blur + live GPU AGSL `RuntimeShader` scroll-reactive Fresnel caustics.
-  - **iOS 26 Liquid Glass Dock & Folders**: Floating clear glass Hotseat pill and translucent squircle folders with live backdrop blur.
+- **Built-In LSPosed Module (One UI 8 / 8.5 / 9+)** — Distributed inside the exact same `OneLiquid.apk` with an in-app **ON / OFF master toggle**, **Refraction Strength selector (`Subtle` / `iOS 26` / `Liquid Syrup`)**, **live 6-point status checklist**, and **Restart SystemUI / Restart One UI Home** controls:
+  - **Live 120fps AGSL "Liquid Syrup" Refraction & Lens Magnification**: Samples your live Home Screen wallpaper into a GPU `BitmapShader` and runs a real Snell's-law thick-droplet lens shader on every icon — bulging the center like a convex lens, dramatically bending & wrapping wallpaper colors around the thick curved rim as you swipe, and adding subtle RGB prismatic chromatic dispersion.
+  - **Gyroscope Tilt Specular Glints**: Wet liquid caustics, specular dome sheen, and subtle glass parallax glide smoothly as you tilt your phone (with zero idle battery drain when stationary).
+  - **1:1 Floating Frosted Glyphs & Glass Folders**: Strips static baked plates so pure frosted-white glyphs float physically inside each live refracting liquid-glass droplet (with zero double borders).
   - **SystemUI Glass Polish**: Subtle translucent Liquid Glass specular rims in `com.android.systemui`.
 
 ## Icon Preview (288 of 1,020+ Icons)

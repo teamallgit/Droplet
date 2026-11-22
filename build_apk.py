@@ -179,8 +179,8 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.oneliquid.iconpack"
-    android:versionCode="6"
-    android:versionName="2.0.1">
+    android:versionCode="7"
+    android:versionName="2.1.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 
@@ -210,7 +210,7 @@ def generate_manifest():
 
         <!-- LSPosed / Xposed Module Metadata (One UI 8 / 8.5 / 9+) -->
         <meta-data android:name="xposedmodule" android:value="true" />
-        <meta-data android:name="xposeddescription" android:value="1:1 iOS 26 Clear Liquid Glass icons, live SemBlurInfo backdrop blur, AGSL Fresnel refraction, dock &amp; folder glass for One UI 8 / 8.5 / 9+" />
+        <meta-data android:name="xposeddescription" android:value="1:1 iOS 26/27 Liquid Glass icons with live 120fps AGSL wallpaper refraction, lens magnification, RGB dispersion &amp; gyroscope tilt caustics for One UI 8 / 8.5 / 9+" />
         <meta-data android:name="xposedminversion" android:value="93" />
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
         <meta-data android:name="xposedsharedprefs" android:value="true" />

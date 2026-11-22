@@ -14,6 +14,10 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Build;
 import android.view.View;
 import android.widget.TextView;
@@ -25,21 +29,24 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.xmlpull.v1.XmlPullParser;
 
 /**
- * OneLiquid LSPosed Module for Samsung One UI 8 / 8.5 / 9+ (HoneySpace & SystemUI).
+ * OneLiquid v2.1.0 LSPosed Module for Samsung One UI 8 / 8.5 / 9+.
  *
- * v2.0.1 fixes:
- *  - Prevents double-wrapping icons that are already translucent Liquid Glass (e.g. Theme Park active)
- *  - Resolves HoneySpace icons cleanly by ComponentName OR installed app label -> 1,020 OneLiquid pack
- *  - Aligns live AGSL scroll-reactive Fresnel rim pixel-for-pixel with OneLiquid's squircle margin
- *  - Hooks HotseatCellLayout (as well as HotseatBackgroundView) so the floating iOS 26 Glass Dock renders!
+ * Renders TRUE real-time GPU AGSL "Liquid Syrup" Glass Refraction on every Home Screen icon:
+ *  - Live wallpaper BitmapShader sampling (Snell's-law edge bend + convex lens magnification + RGB dispersion)
+ *  - Live gyroscope tilt & swipe-reactive specular caustics (zero idle redraws when stationary!)
+ *  - Clean pure-glyph separation so icons float INSIDE the live refracting glass droplet (zero double boxes!)
+ *  - Liquid Glass Folders & SystemUI Glass Polish (Dock hook removed per user request)
  */
 public final class OneLiquidHook implements IXposedHookLoadPackage {
 
@@ -49,10 +56,19 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private static volatile Map<String, String> sCompMap;
     private static volatile Map<String, String> sPkgMap;
     private static volatile Map<String, String> sLabelToDrawableMap;
-    private static final Map<String, Bitmap> sIconCache = new ConcurrentHashMap<>();
+    private static final Map<String, Bitmap> sPureGlyphCache = new ConcurrentHashMap<>();
+    private static final Map<String, Bitmap> sFullIconCache = new ConcurrentHashMap<>();
+    private static final Set<View> sActiveIcons = Collections.newSetFromMap(new WeakHashMap<>());
     private static final AtomicInteger sHomeHooks = new AtomicInteger(0);
     private static final AtomicInteger sSysUiHooks = new AtomicInteger(0);
     private static final ThreadLocal<Boolean> sInSetIcon = new ThreadLocal<>();
+
+    // Live smoothed gyroscope/gravity tilt vector in [-1..1]
+    private static volatile float sTiltX = 0f;
+    private static volatile float sTiltY = 0f;
+    private static volatile float sLastNotifiedTiltX = 0f;
+    private static volatile float sLastNotifiedTiltY = 0f;
+    private static volatile boolean sSensorRegistered = false;
 
     private static XSharedPreferences prefs() {
         if (sPrefs == null) {
@@ -76,6 +92,13 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
 
     private static boolean opt(String key, boolean def) {
         return prefs().getBoolean(key, def);
+    }
+
+    private static float getRefractionStrength() {
+        int lvl = prefs().getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 2); // Default: Liquid Syrup (2)!
+        if (lvl == 0) return 0.65f;      // Subtle
+        if (lvl == 1) return 1.00f;      // iOS 26 Balanced
+        return 1.38f;                    // Liquid Syrup (viscous thick droplet lens!)
     }
 
     @Override
@@ -112,23 +135,74 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
         }
     }
 
-    private void registerStatusReceiver(ClassLoader cl, final String pingAction, final String targetName, final AtomicInteger hookCounter) {
+    private void setupGyroSensor(Context ctx) {
+        if (sSensorRegistered) return;
+        sSensorRegistered = true;
+        try {
+            SensorManager sm = (SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
+            if (sm == null) return;
+            Sensor s = sm.getDefaultSensor(Sensor.TYPE_GRAVITY);
+            if (s == null) s = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (s == null) return;
+            sm.registerListener(new SensorEventListener() {
+                @Override
+                public void onSensorChanged(SensorEvent event) {
+                    if (!isEnabled() || !opt(ModuleStatus.KEY_GYRO_TILT, true)) return;
+                    // Normalize gravity tilt cleanly to [-1..1] with smooth exponential damping
+                    float gx = Math.max(-1f, Math.min(1f, -event.values[0] / 6.5f));
+                    float gy = Math.max(-1f, Math.min(1f, (event.values[1] - 4.5f) / 6.5f));
+                    sTiltX = sTiltX * 0.78f + gx * 0.22f;
+                    sTiltY = sTiltY * 0.78f + gy * 0.22f;
+
+                    // Only invalidate visible home icons when tilt actually moves (zero idle battery drain!)
+                    if (Math.abs(sTiltX - sLastNotifiedTiltX) > 0.018f || Math.abs(sTiltY - sLastNotifiedTiltY) > 0.018f) {
+                        sLastNotifiedTiltX = sTiltX;
+                        sLastNotifiedTiltY = sTiltY;
+                        synchronized (sActiveIcons) {
+                            for (View v : sActiveIcons) {
+                                if (v != null && v.isShown() && v.isAttachedToWindow()) {
+                                    v.postInvalidateOnAnimation();
+                                }
+                            }
+                        }
+                    }
+                }
+                @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+            }, s, SensorManager.SENSOR_DELAY_UI);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "gyro setup err: " + t);
+        }
+    }
+
+    private void registerStatusReceiver(ClassLoader cl, final String pingAction, final String targetName,
+                                        final AtomicInteger hookCounter, final boolean listenWallpaper) {
         try {
             XposedBridge.hookAllMethods(Application.class, "onCreate", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
                         final Application app = (Application) param.thisObject;
+                        if (listenWallpaper) {
+                            setupGyroSensor(app);
+                        }
                         IntentFilter f = new IntentFilter();
                         f.addAction(pingAction);
                         f.addAction(ModuleStatus.ACTION_RELOAD_PREFS);
+                        if (listenWallpaper) {
+                            f.addAction(Intent.ACTION_WALLPAPER_CHANGED);
+                        }
                         BroadcastReceiver br = new BroadcastReceiver() {
                             @Override
                             public void onReceive(Context context, Intent intent) {
                                 String act = intent != null ? intent.getAction() : null;
-                                if (ModuleStatus.ACTION_RELOAD_PREFS.equals(act)) {
+                                if (Intent.ACTION_WALLPAPER_CHANGED.equals(act)) {
+                                    LiquidGlassRuntime.invalidateWallpaperCache();
+                                    invalidateVisibleIcons();
+                                } else if (ModuleStatus.ACTION_RELOAD_PREFS.equals(act)) {
                                     reloadPrefs();
-                                    sIconCache.clear();
+                                    sPureGlyphCache.clear();
+                                    sFullIconCache.clear();
+                                    invalidateVisibleIcons();
                                 } else if (pingAction.equals(act)) {
                                     reloadPrefs();
                                     Intent pong = new Intent(ModuleStatus.ACTION_PONG);
@@ -153,6 +227,16 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             });
         } catch (Throwable t) {
             XposedBridge.log(TAG + "Application.onCreate hook err: " + t);
+        }
+    }
+
+    private static void invalidateVisibleIcons() {
+        synchronized (sActiveIcons) {
+            for (View v : sActiveIcons) {
+                if (v != null && v.isAttachedToWindow()) {
+                    v.postInvalidate();
+                }
+            }
         }
     }
 
@@ -188,7 +272,6 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                 xpp.close();
             }
 
-            // Build installed app label -> drawable lookup so even HoneySpace views without a tag match 100%!
             try {
                 PackageManager pm = hostCtx.getPackageManager();
                 Intent main = new Intent(Intent.ACTION_MAIN);
@@ -213,7 +296,6 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             sCompMap = compMap;
             sPkgMap = pkgMap;
             sLabelToDrawableMap = labelMap;
-            XposedBridge.log(TAG + "Loaded " + compMap.size() + " components, " + labelMap.size() + " label mappings");
         } catch (Throwable t) {
             XposedBridge.log(TAG + "Failed loading OneLiquid resources: " + t);
         }
@@ -279,12 +361,12 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
         return null;
     }
 
-    private static Drawable loadOneLiquidDrawable(Context ctx, ComponentName cn, String labelKey, Drawable orig, int iconPx) {
-        // CRITICAL: Never double-wrap an icon that is ALREADY a translucent Liquid Glass icon
-        // (e.g. already applied via Theme Park or already processed by OneLiquid)!
-        if (orig instanceof LiquidGlassRuntime.LiquidGlassDrawable) {
-            return null;
-        }
+    /**
+     * Loads a pure floating frosted-white glyph (stripping any static baked plate/rim when
+     * live AGSL refraction is enabled, so the live GPU refracting droplet acts as the icon plate!).
+     */
+    private static Drawable prepareGlyphDrawable(Context ctx, ComponentName cn, String labelKey, Drawable orig, int iconPx, boolean liveRefraction) {
+        if (orig instanceof LiquidGlassRuntime.PureGlyphDrawable) return null;
 
         ensureIconPackLoaded(ctx);
         Resources res = sModuleRes;
@@ -293,54 +375,101 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             if (cn != null) {
                 String fullKey = cn.getPackageName() + "/" + cn.getClassName();
                 drawName = sCompMap != null ? sCompMap.get(fullKey) : null;
-                if (drawName == null && sPkgMap != null) {
-                    drawName = sPkgMap.get(cn.getPackageName());
-                }
+                if (drawName == null && sPkgMap != null) drawName = sPkgMap.get(cn.getPackageName());
             }
             if (drawName == null && labelKey != null && sLabelToDrawableMap != null) {
                 drawName = sLabelToDrawableMap.get(labelKey);
             }
             if (drawName != null) {
-                Bitmap cached = sIconCache.get(drawName);
-                if (cached == null) {
-                    int id = res.getIdentifier(drawName, "drawable", ModuleStatus.PKG);
-                    if (id != 0) {
-                        Drawable d = res.getDrawable(id, null);
-                        if (d instanceof BitmapDrawable) {
-                            cached = ((BitmapDrawable) d).getBitmap();
-                            if (cached != null) sIconCache.put(drawName, cached);
+                if (liveRefraction) {
+                    Bitmap pure = sPureGlyphCache.get(drawName);
+                    if (pure == null) {
+                        int id = res.getIdentifier(drawName, "drawable", ModuleStatus.PKG);
+                        if (id != 0) {
+                            Drawable d = res.getDrawable(id, null);
+                            if (d instanceof BitmapDrawable && ((BitmapDrawable) d).getBitmap() != null) {
+                                // Full-bleed icons (Notes, Maps, Clock) look best kept mostly intact; standard icons strip static plate!
+                                if ("ios_notes".equals(drawName) || "ios_maps".equals(drawName) || "ios_clock".equals(drawName)) {
+                                    pure = ((BitmapDrawable) d).getBitmap();
+                                } else {
+                                    pure = LiquidGlassRuntime.extractPureGlyphFromOneLiquid(((BitmapDrawable) d).getBitmap());
+                                }
+                                if (pure != null) sPureGlyphCache.put(drawName, pure);
+                            }
                         }
                     }
-                }
-                if (cached != null) {
-                    return new LiquidGlassRuntime.LiquidGlassDrawable(ctx.getResources(), cached);
+                    if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
+                } else {
+                    Bitmap full = sFullIconCache.get(drawName);
+                    if (full == null) {
+                        int id = res.getIdentifier(drawName, "drawable", ModuleStatus.PKG);
+                        if (id != 0) {
+                            Drawable d = res.getDrawable(id, null);
+                            if (d instanceof BitmapDrawable && ((BitmapDrawable) d).getBitmap() != null) {
+                                full = ((BitmapDrawable) d).getBitmap();
+                                sFullIconCache.put(drawName, full);
+                            }
+                        }
+                    }
+                    if (full != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), full);
                 }
             }
         }
 
-        // If already translucent glass (e.g. Theme Park OneLiquid pack active), leave untouched at full 1:1 scale!
-        if (LiquidGlassRuntime.isAlreadyTranslucentGlass(orig)) {
-            return null;
+        // If Theme Park OneLiquid is active and live refraction is ON, strip the static plate from orig too!
+        if (liveRefraction && orig instanceof BitmapDrawable && ((BitmapDrawable) orig).getBitmap() != null
+                && LiquidGlassRuntime.isAlreadyTranslucentGlass(orig)) {
+            Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromOneLiquid(((BitmapDrawable) orig).getBitmap());
+            if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
         }
 
-        // Otherwise convert opaque stock icon cleanly on the fly!
-        if (orig != null) {
-            Bitmap glassBmp = LiquidGlassRuntime.convertDrawableToLiquidGlass(orig, iconPx > 0 ? iconPx : 192);
-            if (glassBmp != null) {
-                return new LiquidGlassRuntime.LiquidGlassDrawable(ctx.getResources(), glassBmp);
-            }
+        // Unknown opaque stock app -> extract pure frosted white glyph to float inside live droplet!
+        if (liveRefraction && orig != null && !LiquidGlassRuntime.isAlreadyTranslucentGlass(orig)) {
+            Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromOpaqueDrawable(orig, iconPx > 0 ? iconPx : 192);
+            if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
         }
+        return null;
+    }
+
+    private static Drawable getIconFromView(TextView tv) {
+        try {
+            Object f = XposedHelpers.getObjectField(tv, "icon");
+            if (f instanceof Drawable) return (Drawable) f;
+        } catch (Throwable ignored) {}
+        Drawable[] cds = tv.getCompoundDrawables();
+        if (cds != null && cds.length > 1) return cds[1];
         return null;
     }
 
     private void hookOneUiHome(ClassLoader cl) {
         XposedBridge.log(TAG + "Hooking One UI Home (" + ModuleStatus.getOneUiVersionName() + ")");
-        registerStatusReceiver(cl, ModuleStatus.ACTION_PING_HOME, "launcher", sHomeHooks);
+        registerStatusReceiver(cl, ModuleStatus.ACTION_PING_HOME, "launcher", sHomeHooks, true);
 
-        // 1. Hook HoneySpace IconViewImpl (One UI 7 / 8 / 8.5 / 9)
         Class<?> iconViewCls = XposedHelpers.findClassIfExists("com.honeyspace.ui.common.iconview.IconViewImpl", cl);
         if (iconViewCls != null) {
             sHomeHooks.incrementAndGet();
+
+            // Track attached icon views for smooth zero-idle-cost gyroscope updates
+            try {
+                XposedBridge.hookAllMethods(iconViewCls, "onAttachedToWindow", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (param.thisObject instanceof View) {
+                            synchronized (sActiveIcons) { sActiveIcons.add((View) param.thisObject); }
+                        }
+                    }
+                });
+                XposedBridge.hookAllMethods(iconViewCls, "onDetachedFromWindow", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (param.thisObject instanceof View) {
+                            synchronized (sActiveIcons) { sActiveIcons.remove((View) param.thisObject); }
+                        }
+                    }
+                });
+            } catch (Throwable ignored) {}
+
+            // 1. Replace icon with pure frosted glyph (when live refraction is ON) so ZERO double borders ever appear!
             try {
                 XposedBridge.hookAllMethods(iconViewCls, "setIcon", new XC_MethodHook() {
                     @Override
@@ -356,8 +485,10 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             Drawable orig = (Drawable) param.args[0];
                             ComponentName cn = extractComponent(param.thisObject);
                             String lbl = extractLabel(param.thisObject);
+                            boolean liveRef = opt(ModuleStatus.KEY_LIVE_REFRACTION, true)
+                                    && LiquidGlassRuntime.ensureWallpaperShader(v.getContext()) != null;
                             int sz = Math.max(orig.getIntrinsicWidth(), 192);
-                            Drawable themed = loadOneLiquidDrawable(v.getContext(), cn, lbl, orig, sz);
+                            Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, orig, sz, liveRef);
                             if (themed != null) {
                                 themed.setBounds(orig.getBounds());
                                 param.args[0] = themed;
@@ -372,11 +503,51 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + "IconViewImpl.setIcon hook err: " + t);
             }
 
-            // Live scroll-reactive AGSL Fresnel shimmer — inset by exact 1.95% margin so it aligns
-            // pixel-for-pixel with OneLiquid's squircle rim (ZERO double border!)
+            // 2. LIVE 120fps AGSL "Corn Syrup" Refracting Glass Droplet (BEFORE glyph) + Wet Specular Glaze (AFTER glyph)!
             try {
                 XposedBridge.hookAllMethods(iconViewCls, "onDraw", new XC_MethodHook() {
                     private final int[] loc = new int[2];
+
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIVE_REFRACTION, true)) return;
+                        if (!(param.thisObject instanceof TextView) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
+                        if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
+                        try {
+                            TextView tv = (TextView) param.thisObject;
+                            Canvas canvas = (Canvas) param.args[0];
+                            Drawable icon = getIconFromView(tv);
+                            if (icon == null) return;
+                            int iw = icon.getBounds().width();
+                            int ih = icon.getBounds().height();
+                            if (iw < 32 || ih < 32) return;
+
+                            float insetX = iw * 0.0195f;
+                            float insetY = ih * 0.0195f;
+                            float left = (tv.getWidth() - iw) * 0.5f + insetX;
+                            float top = tv.getPaddingTop() + insetY;
+                            float boxW = iw - 2f * insetX;
+                            float boxH = ih - 2f * insetY;
+
+                            tv.getLocationOnScreen(loc);
+                            float screenX = loc[0] + left;
+                            float screenY = loc[1] + top;
+
+                            float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
+                            float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
+                            // Also add subtle dynamic scroll angle shift as icons sweep across the screen!
+                            int sw = Math.max(tv.getResources().getDisplayMetrics().widthPixels, 1080);
+                            float scrollShift = ((screenX + boxW * 0.5f) / (float) sw) * 2.0f - 1.0f;
+
+                            LiquidGlassRuntime.drawLiveLiquidLensBody(
+                                    tv.getContext(), canvas, left, top, boxW, boxH,
+                                    screenX, screenY,
+                                    tx + scrollShift * 0.18f, ty,
+                                    getRefractionStrength()
+                            );
+                        } catch (Throwable ignored) {}
+                    }
+
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         if (!isEnabled() || !opt(ModuleStatus.KEY_LIVE_REFRACTION, true)) return;
@@ -385,34 +556,27 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         try {
                             TextView tv = (TextView) param.thisObject;
                             Canvas canvas = (Canvas) param.args[0];
-                            Drawable icon = null;
-                            try {
-                                Object f = XposedHelpers.getObjectField(tv, "icon");
-                                if (f instanceof Drawable) icon = (Drawable) f;
-                            } catch (Throwable ignored) {}
-                            if (icon == null) {
-                                Drawable[] cds = tv.getCompoundDrawables();
-                                if (cds != null && cds.length > 1) icon = cds[1];
-                            }
+                            Drawable icon = getIconFromView(tv);
                             if (icon == null) return;
                             int iw = icon.getBounds().width();
                             int ih = icon.getBounds().height();
                             if (iw < 32 || ih < 32) return;
 
-                            tv.getLocationOnScreen(loc);
-                            int sw = Math.max(tv.getResources().getDisplayMetrics().widthPixels, 1080);
-                            int sh = Math.max(tv.getResources().getDisplayMetrics().heightPixels, 2340);
-                            float shiftX = (loc[0] / (float) sw) * 2.0f - 1.0f;
-                            float shiftY = (loc[1] / (float) sh) * 2.0f - 1.0f;
-
-                            // Exact 1.95% margin inset matches OneLiquid's 10/512 squircle geometry!
                             float insetX = iw * 0.0195f;
                             float insetY = ih * 0.0195f;
                             float left = (tv.getWidth() - iw) * 0.5f + insetX;
                             float top = tv.getPaddingTop() + insetY;
-                            LiquidGlassRuntime.drawLiveLiquidRim(
-                                    canvas, left, top, iw - 2f * insetX, ih - 2f * insetY,
-                                    shiftX, shiftY, false, 0.36f);
+                            float boxW = iw - 2f * insetX;
+                            float boxH = ih - 2f * insetY;
+
+                            tv.getLocationOnScreen(loc);
+                            int sw = Math.max(tv.getResources().getDisplayMetrics().widthPixels, 1080);
+                            float scrollShift = ((loc[0] + left + boxW * 0.5f) / (float) sw) * 2.0f - 1.0f;
+                            float tx = (opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f) + scrollShift * 0.25f;
+                            float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
+
+                            // Wet liquid specular glaze & razor-crisp Fresnel caustic rim ON TOP!
+                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, 0.92f);
                         } catch (Throwable ignored) {}
                     }
                 });
@@ -421,13 +585,38 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             }
         }
 
-        // 2. Hook HoneySpace FolderIconViewImpl for 1:1 iOS 26 Clear Liquid Glass Folders
+        // 3. Hook HoneySpace FolderIconViewImpl for LIVE refracting iOS 26 Liquid Glass Folders
         Class<?> folderCls = XposedHelpers.findClassIfExists("com.honeyspace.ui.common.iconview.FolderIconViewImpl", cl);
         if (folderCls != null) {
             sHomeHooks.incrementAndGet();
             try {
                 XposedBridge.hookAllMethods(folderCls, "onDraw", new XC_MethodHook() {
                     private final int[] loc = new int[2];
+
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        if (!isEnabled() || !opt(ModuleStatus.KEY_GLASS_FOLDERS, true)) return;
+                        if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
+                        try {
+                            View v = (View) param.thisObject;
+                            Canvas c = (Canvas) param.args[0];
+                            Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
+                            int iw = (icon != null && icon.getBounds().width() >= 32)
+                                    ? icon.getBounds().width() : Math.round(Math.min(v.getWidth(), v.getHeight()) * 0.72f);
+                            int ih = (icon != null && icon.getBounds().height() >= 32) ? icon.getBounds().height() : iw;
+                            float insetX = iw * 0.0195f;
+                            float insetY = ih * 0.0195f;
+                            float left = (v.getWidth() - iw) * 0.5f + insetX;
+                            float top = v.getPaddingTop() + insetY;
+                            v.getLocationOnScreen(loc);
+                            float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
+                            float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
+                            LiquidGlassRuntime.drawLiveLiquidLensBody(
+                                    v.getContext(), c, left, top, iw - 2f * insetX, ih - 2f * insetY,
+                                    loc[0] + left, loc[1] + top, tx, ty, getRefractionStrength());
+                        } catch (Throwable ignored) {}
+                    }
+
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         if (!isEnabled() || !opt(ModuleStatus.KEY_GLASS_FOLDERS, true)) return;
@@ -435,23 +624,17 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         try {
                             View v = (View) param.thisObject;
                             Canvas c = (Canvas) param.args[0];
-                            Drawable icon = null;
-                            try {
-                                Object f = XposedHelpers.getObjectField(v, "icon");
-                                if (f instanceof Drawable) icon = (Drawable) f;
-                            } catch (Throwable ignored) {}
+                            Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
                             int iw = (icon != null && icon.getBounds().width() >= 32)
                                     ? icon.getBounds().width() : Math.round(Math.min(v.getWidth(), v.getHeight()) * 0.72f);
-                            int ih = (icon != null && icon.getBounds().height() >= 32)
-                                    ? icon.getBounds().height() : iw;
+                            int ih = (icon != null && icon.getBounds().height() >= 32) ? icon.getBounds().height() : iw;
                             float insetX = iw * 0.0195f;
                             float insetY = ih * 0.0195f;
                             float left = (v.getWidth() - iw) * 0.5f + insetX;
                             float top = v.getPaddingTop() + insetY;
-                            v.getLocationOnScreen(loc);
-                            int sw = Math.max(v.getResources().getDisplayMetrics().widthPixels, 1080);
-                            float shiftX = (loc[0] / (float) sw) * 2.0f - 1.0f;
-                            LiquidGlassRuntime.drawLiveLiquidRim(c, left, top, iw - 2f * insetX, ih - 2f * insetY, shiftX, 0f, false, 0.75f);
+                            float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
+                            float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
+                            LiquidGlassRuntime.drawLiveGlazeRim(c, left, top, iw - 2f * insetX, ih - 2f * insetY, tx, ty, false, 0.90f);
                         } catch (Throwable ignored) {}
                     }
                 });
@@ -459,60 +642,11 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + "FolderIconViewImpl hook err: " + t);
             }
         }
-
-        // 3. Hook HoneySpace HotseatCellLayout & HotseatBackgroundView for 1:1 iOS 26 Floating Glass Dock Pill!
-        String[] dockClasses = new String[] {
-            "com.honeyspace.ui.honeypots.hotseat.presentation.HotseatCellLayout",
-            "com.honeyspace.ui.honeypots.hotseat.presentation.HotseatBackgroundView",
-        };
-        for (String dockClsName : dockClasses) {
-            Class<?> dockCls = XposedHelpers.findClassIfExists(dockClsName, cl);
-            if (dockCls == null) continue;
-            sHomeHooks.incrementAndGet();
-            XC_MethodHook dockHook = new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (!(param.thisObject instanceof View)) return;
-                    View v = (View) param.thisObject;
-                    if (!isEnabled() || !opt(ModuleStatus.KEY_GLASS_DOCK, true)) {
-                        LiquidGlassRuntime.clearSemBlur(v);
-                        return;
-                    }
-                    try {
-                        float d = v.getResources().getDisplayMetrics().density;
-                        LiquidGlassRuntime.styleGlassDock(v, d);
-                    } catch (Throwable ignored) {}
-                }
-            };
-            try {
-                XposedBridge.hookAllMethods(dockCls, "onAttachedToWindow", dockHook);
-                XposedBridge.hookAllMethods(dockCls, "onSizeChanged", dockHook);
-                XposedBridge.hookAllMethods(dockCls, "dispatchDraw", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        if (!isEnabled() || !opt(ModuleStatus.KEY_GLASS_DOCK, true)) return;
-                        if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
-                        View v = (View) param.thisObject;
-                        float d = v.getResources().getDisplayMetrics().density;
-                        float padX = 10f * d;
-                        float padY = 2f * d;
-                        if (v.getWidth() > padX * 2 + 20 && v.getHeight() > padY * 2 + 20) {
-                            LiquidGlassRuntime.drawLiveLiquidRim(
-                                    (Canvas) param.args[0], padX, padY,
-                                    v.getWidth() - padX * 2f, v.getHeight() - padY * 2f,
-                                    0f, 0f, true, 0.58f);
-                        }
-                    }
-                });
-            } catch (Throwable t) {
-                XposedBridge.log(TAG + dockClsName + " hook err: " + t);
-            }
-        }
     }
 
     private void hookSystemUi(ClassLoader cl) {
         XposedBridge.log(TAG + "Hooking SystemUI (" + ModuleStatus.getOneUiVersionName() + ")");
-        registerStatusReceiver(cl, ModuleStatus.ACTION_PING_SYSUI, "systemui", sSysUiHooks);
+        registerStatusReceiver(cl, ModuleStatus.ACTION_PING_SYSUI, "systemui", sSysUiHooks, false);
 
         String[] targets = new String[] {
             "com.android.systemui.qs.tileimpl.QSTileViewImpl",
@@ -530,7 +664,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         View v = (View) param.thisObject;
                         if (v.getWidth() < 40 || v.getHeight() < 40) return;
-                        LiquidGlassRuntime.drawLiveLiquidRim((Canvas) param.args[0], 0f, 0f, v.getWidth(), v.getHeight(), 0f, 0f, true, 0.42f);
+                        LiquidGlassRuntime.drawLiveGlazeRim((Canvas) param.args[0], 0f, 0f, v.getWidth(), v.getHeight(), 0f, 0f, true, 0.45f);
                     }
                 });
             } catch (Throwable ignored) {}

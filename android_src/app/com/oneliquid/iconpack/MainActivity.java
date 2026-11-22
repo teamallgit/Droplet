@@ -343,24 +343,69 @@ public class MainActivity extends Activity {
 
         featCard.addView(makeSwitchRow(
                 "1:1 iOS 26 Clear Icons",
-                "Applies all 1,020 icons + live auto-glass conversion on One UI Home",
+                "Pure frosted glyphs floating inside live refracting glass droplets",
                 ModuleStatus.KEY_LIQUID_ICONS, true, false));
         featCard.addView(makeSwitchRow(
-                "Live Backdrop Blur & AGSL Refraction",
-                "Scroll-reactive Fresnel specular shimmer & hardware SemBlurInfo",
+                "Live Liquid Syrup Refraction & Magnification",
+                "120fps GPU AGSL Snell's-law edge warp, convex lens bulge & RGB dispersion",
                 ModuleStatus.KEY_LIVE_REFRACTION, true, false));
         featCard.addView(makeSwitchRow(
-                "iOS 26 Liquid Glass Dock",
-                "Floating translucent glass pill with live backdrop blur on Hotseat",
-                ModuleStatus.KEY_GLASS_DOCK, true, false));
+                "Gyroscope Tilt Specular Glint",
+                "Wet liquid caustics & parallax glide smoothly as you tilt your phone",
+                ModuleStatus.KEY_GYRO_TILT, true, false));
         featCard.addView(makeSwitchRow(
                 "iOS 26 Liquid Glass Folders",
-                "Translucent continuous-squircle glass tiles with Fresnel rim",
+                "Live refracting continuous-squircle glass folders on Home Screen",
                 ModuleStatus.KEY_GLASS_FOLDERS, true, false));
         featCard.addView(makeSwitchRow(
                 "SystemUI Glass Polish",
                 "Subtle Liquid Glass specular rims on QS tiles & notification cards",
                 ModuleStatus.KEY_SYSTEMUI_GLASS, true, false));
+
+        // 3-way Liquid Refraction Strength selector (Subtle / iOS 26 / Liquid Syrup)
+        TextView strLbl = new TextView(this);
+        strLbl.setText("REFRACTION & MAGNIFICATION STRENGTH");
+        strLbl.setTextColor(Color.parseColor("#8AC4FF"));
+        strLbl.setTextSize(10.5f);
+        strLbl.setTypeface(Typeface.DEFAULT_BOLD);
+        strLbl.setPadding(0, dp(10), 0, dp(6));
+        featCard.addView(strLbl);
+
+        LinearLayout segRow = new LinearLayout(this);
+        segRow.setOrientation(LinearLayout.HORIZONTAL);
+        segRow.setBackground(cardBg(Color.parseColor("#18FFFFFF"), Color.parseColor("#33FFFFFF"), 12));
+        segRow.setPadding(dp(3), dp(3), dp(3), dp(3));
+
+        final String[] levelNames = new String[] { "Subtle", "iOS 26", "Liquid Syrup" };
+        final Button[] levelBtns = new Button[3];
+        final Runnable styleLevels = () -> {
+            int cur = prefs.getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 2);
+            for (int k = 0; k < 3; k++) {
+                boolean sel = (k == cur);
+                levelBtns[k].setBackground(sel
+                        ? cardBg(Color.parseColor("#5574C8FF"), Color.parseColor("#99B8E6FF"), 9)
+                        : cardBg(Color.TRANSPARENT, Color.TRANSPARENT, 9));
+                levelBtns[k].setTextColor(sel ? Color.WHITE : Color.parseColor("#9EB5D2"));
+            }
+        };
+        for (int k = 0; k < 3; k++) {
+            final int lvl = k;
+            Button lb = makeTabButton(levelNames[k]);
+            lb.setTextSize(12f);
+            lb.setOnClickListener(v -> {
+                prefs.edit().putInt(ModuleStatus.KEY_REFRACTION_LEVEL, lvl).apply();
+                styleLevels.run();
+                notifyHooksPrefsChanged();
+                Toast.makeText(this, "Refraction set to " + levelNames[lvl], Toast.LENGTH_SHORT).show();
+            });
+            levelBtns[k] = lb;
+            segRow.addView(lb, new LinearLayout.LayoutParams(0, dp(34), 1f));
+        }
+        styleLevels.run();
+        LinearLayout.LayoutParams segLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        segLp.bottomMargin = dp(6);
+        featCard.addView(segRow, segLp);
 
         LinearLayout.LayoutParams featLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

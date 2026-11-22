@@ -16,9 +16,11 @@ public final class ModuleStatus {
     public static final String KEY_LSPOSED_ENABLED = "lsposed_enabled";
     public static final String KEY_LIQUID_ICONS = "opt_liquid_icons";
     public static final String KEY_LIVE_REFRACTION = "opt_live_refraction";
-    public static final String KEY_GLASS_DOCK = "opt_glass_dock";
+    public static final String KEY_GYRO_TILT = "opt_gyro_tilt";
     public static final String KEY_GLASS_FOLDERS = "opt_glass_folders";
     public static final String KEY_SYSTEMUI_GLASS = "opt_systemui_glass";
+    // 0 = Subtle, 1 = iOS 26 Balanced, 2 = Liquid Syrup (Strong Refraction & Magnification)
+    public static final String KEY_REFRACTION_LEVEL = "opt_refraction_level";
 
     public static final String ACTION_PING_HOME = "com.oneliquid.iconpack.ACTION_PING_HOME";
     public static final String ACTION_PING_SYSUI = "com.oneliquid.iconpack.ACTION_PING_SYSUI";
@@ -29,15 +31,12 @@ public final class ModuleStatus {
     public static final String PKG_SYSTEMUI = "com.android.systemui";
     public static final String PKG_THEME_PARK = "com.samsung.android.themedesigner";
 
-    /**
-     * Self-hooked by OneLiquidHook inside LSPosed to return true when the module is active.
-     */
     public static boolean isModuleActive() {
         return false;
     }
 
     public static String getModuleVersion() {
-        return "2.0.1";
+        return "2.1.0";
     }
 
     public static int getOneUiVersionInt() {
@@ -61,9 +60,7 @@ public final class ModuleStatus {
     }
 
     public static boolean isOneUiSupported() {
-        int v = getOneUiVersionInt();
-        // Supports One UI 8.0 (80000), 8.5 (80500), 9.0 (90000), and newer (plus best-effort 7.0+)
-        return v >= 70000;
+        return getOneUiVersionInt() >= 70000;
     }
 
     @SuppressWarnings("deprecation")
