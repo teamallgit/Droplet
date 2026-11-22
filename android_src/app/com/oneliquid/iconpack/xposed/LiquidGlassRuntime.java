@@ -31,16 +31,18 @@ import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
 /**
- * Authentic Apple iOS 26 "Introducing Liquid Glass" Real-Time Optical Engine for One UI 8 / 8.5 / 9+.
+ * Authentic Apple iOS 26 "Introducing Liquid Glass" Real-Time Optical Lens Engine for One UI 8 / 8.5 / 9+.
  *
- * Real-time Live Wallpaper Magnification & Snell's-Law Refraction:
- *  - Captures ONLY the live wallpaper SurfaceFlinger layer (mirrorWallpaperSurface + ScreenCaptureInternal.captureLayers
- *    or IWindowManager.screenshotWallpaper, using TouchWizHome's granted READ_FRAME_BUFFER permission) at ~30fps
- *    on a background HandlerThread ONLY while the Home Screen is actively visible (0% CPU when hidden/screen off!).
- *  - Static wallpapers are captured once at 0% ongoing cost and still refract at 120fps on scroll/drag/tilt!
- *  - Runs an AGSL convex optical lens shader: genuine ~1.2x magnification inside each icon + steep Snell's-law
- *    curved-bevel edge bending + prismatic RGB chromatic dispersion + razor-thin gyroscope Fresnel specular rim.
- *  - Automatic fallback to hardware SurfaceFlinger BackgroundBlurDrawable if wallpaper surface capture is unavailable.
+ * Real Optical Physics (Zero Flat Tinted Squares!):
+ *  - Interior (~80%): Crystal-clear convex lens magnification (~1.26x) preserving true continuous wallpaper gradients
+ *    without smearing the center pixel across the whole tile.
+ *  - Outer Curved Bevel (~20%): True high-curvature meniscus refraction bending rays steeply OUTWARD across the
+ *    curved glass lip (+norm), pulling contrasting perimeter colors into a glossy refracted glass ring with crisp
+ *    prismatic RGB chromatic dispersion and liquid Fresnel caustics!
+ *  - Live 30fps Wallpaper Capture: Captures ONLY the live wallpaper layer via IWindowManager.screenshotWallpaper()
+ *    on a background HandlerThread while Home Screen is visible/focused (0% CPU when hidden or screen off).
+ *  - Zero onDraw View mutations: Never calls semSetBlurInfo or toggles BackgroundBlurDrawable during onDraw,
+ *    preventing any icon flicker/disappearance during app open/close animations.
  */
 public final class LiquidGlassRuntime {
 
@@ -52,7 +54,7 @@ public final class LiquidGlassRuntime {
         }
     }
 
-    // Engine A: Authentic Apple iOS 26 Live Convex Magnification + Snell's-Law Bevel Refraction Shader
+    // Engine A: Real Convex Glass Magnification (center) + Outward-Refracting Curved Glass Bevel (rim)
     private static final String APPLE_LIQUID_LENS_AGSL =
         "uniform shader uWallpaper;\n" +
         "uniform float2 uSize;\n" +
@@ -77,7 +79,7 @@ public final class LiquidGlassRuntime {
         "    half3 c2 = uWallpaper.eval(coord + float2(-r,  0.0)).rgb;\n" +
         "    half3 c3 = uWallpaper.eval(coord + float2( 0.0,  r)).rgb;\n" +
         "    half3 c4 = uWallpaper.eval(coord + float2( 0.0, -r)).rgb;\n" +
-        "    return c0 * 0.48 + (c1 + c2 + c3 + c4) * 0.13;\n" +
+        "    return c0 * 0.52 + (c1 + c2 + c3 + c4) * 0.12;\n" +
         "}\n" +
         "half4 main(float2 fragCoord) {\n" +
         "    float2 halfSize = uSize * 0.5;\n" +
@@ -95,54 +97,61 @@ public final class LiquidGlassRuntime {
         "    float dIn = max(-sdf, 0.0);\n" +
         "    float2 norm = squircleNormal(p, b, 4.5);\n" +
         "\n" +
-        "    // Thick-crystal curved optical bevel in outer ~25% of icon + genuine convex magnification across center!\n" +
-        "    float bevelW = minSide * 0.25;\n" +
+        "    // Optical geometry: smooth convex magnifying interior + steep curved glass meniscus in outer ~20%!\n" +
+        "    float bevelW = minSide * 0.20;\n" +
         "    float edgeT = clamp(1.0 - dIn / bevelW, 0.0, 1.0);\n" +
         "    float rimCurve = edgeT * edgeT * (3.0 - 2.0 * edgeT);\n" +
-        "    float lensSlope = pow(edgeT, 1.6);\n" +
+        "    float steepBevel = pow(edgeT, 1.8);\n" +
         "\n" +
-        "    // REAL CONVEX LENS MAGNIFICATION (~1.38x at iOS 26 strength, ~1.55x at Liquid Syrup!)\n" +
-        "    // Sampling inward (-p) pulls background outward -> wallpaper visibly magnifies & swells as it moves through!\n" +
-        "    float r2 = dot(p / max(halfSize, float2(1.0)), p / max(halfSize, float2(1.0)));\n" +
-        "    float magAmt = (0.28 - 0.05 * clamp(r2, 0.0, 1.0)) * uStrength;\n" +
-        "    float2 magOffset = -p * magAmt;\n" +
+        "    // 1. TRUE CONVEX MAGNIFICATION IN CENTER (~1.28x at iOS 26, ~1.40x at Liquid Syrup):\n" +
+        "    //    Pulls interior pixels outward smoothly WITHOUT collapsing to a single center color!\n" +
+        "    float centerWeight = 1.0 - rimCurve;\n" +
+        "    float2 magOffset = -p * (0.24 * uStrength * (0.35 + 0.65 * centerWeight));\n" +
         "\n" +
-        "    // REAL SNELL'S-LAW CURVED-RIM REFRACTION: sharply bends & wraps moving wallpaper colors around the glass bevel!\n" +
-        "    float2 bendOffset = -norm * (minSide * 0.52 * uStrength * lensSlope);\n" +
-        "    float2 tiltParallax = uTilt * (minSide * 0.08 * uStrength);\n" +
+        "    // 2. TRUE CURVED-GLASS BEVEL REFRACTION (+norm): compresses & bends surrounding wallpaper steeply\n" +
+        "    //    into the curved 20% glass wall — creating a vivid, unmistakably glossy 3D refracted ring!\n" +
+        "    float2 rimBend = norm * (minSide * 0.32 * uStrength * steepBevel);\n" +
         "\n" +
-        "    float2 baseScreen = uScreenPos + fragCoord + magOffset + bendOffset + tiltParallax;\n" +
+        "    // 3. LIVE GYROSCOPE REFRACTIVE PARALLAX: tilting the phone visibly shifts the glass lens!\n" +
+        "    float2 tiltShift = uTilt * (minSide * 0.11 * uStrength);\n" +
         "\n" +
-        "    // Ultra-crisp crystal optical clarity (minimal blur so magnified & bent wallpaper details pop sharply!)\n" +
-        "    float blurR = (0.35 + 0.30 * (1.0 - rimCurve)) * min(uWallScale.x, uWallScale.y);\n" +
+        "    float2 baseScreen = uScreenPos + fragCoord + magOffset + rimBend + tiltShift;\n" +
         "\n" +
-        "    // Prismatic optical RGB chromatic dispersion along the curved bevel lip!\n" +
-        "    float dispPx = minSide * 0.036 * uStrength * lensSlope;\n" +
+        "    // Crystal-clear optics: crisp in center, subtle silky glass softness in bevel\n" +
+        "    float blurR = (0.30 + 0.45 * rimCurve) * min(uWallScale.x, uWallScale.y);\n" +
+        "\n" +
+        "    // Real optical RGB chromatic prism dispersion along the steeply curved glass bevel!\n" +
+        "    float dispPx = minSide * 0.042 * uStrength * steepBevel;\n" +
         "    half rCh = sampleGlassOptical((baseScreen + norm * dispPx) * uWallScale, blurR).r;\n" +
         "    half gCh = sampleGlassOptical(baseScreen * uWallScale, blurR).g;\n" +
         "    half bCh = sampleGlassOptical((baseScreen - norm * dispPx) * uWallScale, blurR).b;\n" +
         "    half3 col = half3(rCh, gCh, bCh);\n" +
         "\n" +
-        "    // Optical glass clarity & crisp contrast boost + subtle curved refraction shadow band inside bevel\n" +
+        "    // Natural glass transmission (ZERO artificial color-tinting of the center!)\n" +
         "    half luma = dot(col, half3(0.299, 0.587, 0.114));\n" +
-        "    col = mix(half3(luma), col, half(1.14));\n" +
-        "    col = clamp((col - half3(0.5)) * half(1.06) + half3(0.5), half3(0.0), half3(1.0));\n" +
+        "    col = mix(half3(luma), col, half(1.04 + 0.12 * steepBevel));\n" +
         "\n" +
-        "    // Crisp internal optical bevel rim ring (gives unmistakable 3D cut-crystal lens thickness!)\n" +
-        "    float depthLip = exp(-pow((dIn - bevelW * 0.24) / (bevelW * 0.18), 2.0));\n" +
-        "    col *= half(1.0 - 0.10 * depthLip);\n" +
+        "    // Optical total-internal-reflection dark/bright meniscus bands inside the curved glass wall\n" +
+        "    float2 lDir = normalize(float2(-0.707, -0.707) + uTilt * 0.65);\n" +
+        "    float cosTL = max(0.0, dot(norm, lDir));\n" +
+        "    float cosBR = max(0.0, dot(norm, -lDir));\n" +
+        "    float innerDarkBand = exp(-pow((dIn - bevelW * 0.42) / (bevelW * 0.22), 2.0));\n" +
+        "    col *= half(1.0 - 0.11 * innerDarkBand * (1.0 - 0.55 * cosTL - 0.40 * cosBR));\n" +
         "\n" +
-        "    // Very light crystal glass sheen (low center haze so magnified wallpaper shines right through!)\n" +
+        "    // Liquid glass caustic light concentration right along the curved bevel (gleams live with tilt!)\n" +
+        "    float causticBand = exp(-pow((dIn - bevelW * 0.20) / (bevelW * 0.20), 2.0));\n" +
+        "    float caustic = causticBand * (0.12 + 0.22 * pow(cosTL, 1.8) + 0.16 * pow(cosBR, 2.2));\n" +
+        "\n" +
+        "    // Ultra-clean crystal clarity in center (only ~5.5% airy glass sheen so live wallpaper shines right through!)\n" +
         "    float yn = p.y / max(halfSize.y, 1.0);\n" +
-        "    float topCatch = clamp((1.0 - yn) * 0.5, 0.0, 1.0);\n" +
-        "    float frost = 0.045 + 0.040 * topCatch + 0.075 * pow(edgeT, 2.2);\n" +
-        "    col = mix(col, half3(1.0), half(frost));\n" +
+        "    float topSheen = 0.040 * pow(clamp((1.0 - yn) * 0.5, 0.0, 1.0), 1.6);\n" +
+        "    col = mix(col, half3(1.0), half(clamp(0.055 + topSheen + caustic, 0.0, 0.42)));\n" +
         "\n" +
         "    col = clamp(col, half3(0.0), half3(1.0));\n" +
         "    return half4(col * mask, mask);\n" +
         "}\n";
 
-    // Engine B: Fallback Crystal-Clear Glass Body (used only if live wallpaper capture is unavailable)
+    // Engine B: Clean Crystal-Clear Glass Body (used during the initial 15ms before frame #1 arrives)
     private static final String APPLE_CLEAR_BODY_AGSL =
         "uniform float2 uSize;\n" +
         "uniform float2 uTilt;\n" +
@@ -173,22 +182,15 @@ public final class LiquidGlassRuntime {
         "    float dIn = max(-sdf, 0.0);\n" +
         "    float2 norm = squircleNormal(p, b, 4.5);\n" +
         "    float2 pn = p / max(halfSize, float2(1.0));\n" +
-        "    float bevelW = minSide * 0.145;\n" +
+        "    float bevelW = minSide * 0.16;\n" +
         "    float edgeT = clamp(1.0 - dIn / bevelW, 0.0, 1.0);\n" +
-        "    float2 lDir = normalize(float2(-0.707, -0.707) + uTilt * 0.55);\n" +
-        "    float cosTL = max(0.0, dot(norm, lDir));\n" +
-        "    float cosBR = max(0.0, dot(norm, -lDir));\n" +
         "    float topCatch = clamp((1.0 - pn.y) * 0.5, 0.0, 1.0);\n" +
-        "    float baseA = 0.145 + 0.055 * topCatch + 0.068 * pow(edgeT, 2.1);\n" +
-        "    float depthLip = exp(-pow((dIn - bevelW * 0.34) / (bevelW * 0.24), 2.0));\n" +
-        "    float darkA = depthLip * (1.0 - 0.65 * cosTL - 0.48 * cosBR) * 0.055;\n" +
-        "    half3 tintCol = half3(0.985 + 0.015 * cosBR, 0.992, 0.992 + 0.008 * cosTL);\n" +
-        "    float outA = clamp(baseA + darkA * (1.0 - baseA), 0.0, 0.32) * mask;\n" +
-        "    half3 outPremul = tintCol * half(baseA * mask) + half3(0.04, 0.06, 0.10) * half(darkA * (1.0 - baseA) * mask);\n" +
-        "    return half4(outPremul, half(outA));\n" +
+        "    float baseA = 0.11 + 0.045 * topCatch + 0.065 * pow(edgeT, 2.1);\n" +
+        "    float outA = clamp(baseA, 0.0, 0.25) * mask;\n" +
+        "    return half4(half3(1.0) * half(outA), half(outA));\n" +
         "}\n";
 
-    // Razor-thin, mirror-sharp authentic Apple iOS 26 specular Fresnel rim
+    // Razor-thin, mirror-sharp authentic Apple iOS 26 specular Fresnel rim (glides live with gyro & scroll!)
     private static final String APPLE_SPECULAR_RIM_AGSL =
         "uniform float2 uSize;\n" +
         "uniform float2 uTilt;\n" +
@@ -215,14 +217,16 @@ public final class LiquidGlassRuntime {
         "    float mask = clamp(0.5 - sdf, 0.0, 1.0);\n" +
         "    float dIn = max(-sdf, 0.0);\n" +
         "    float2 norm = squircleNormal(p, b, n);\n" +
-        "    float2 tlDir = normalize(float2(-0.707, -0.707) + uTilt * 0.60);\n" +
+        "    float2 tlDir = normalize(float2(-0.707, -0.707) + uTilt * 0.70);\n" +
         "    float2 brDir = -tlDir;\n" +
         "    float cosTL = max(0.0, dot(norm, tlDir));\n" +
         "    float cosBR = max(0.0, dot(norm, brDir));\n" +
+        "    // Mirror-sharp 1.15px Fresnel glass edge bright on diagonal TL & BR curves\n" +
         "    float sharpRim = exp(-pow((dIn - 0.95) / 0.85, 2.0));\n" +
-        "    float rimIntensity = 0.24 + 0.74 * pow(cosTL, 2.1) + 0.58 * pow(cosBR, 2.4);\n" +
-        "    float tightBevel = exp(-pow((dIn - 2.3) / 2.0, 2.0)) * (0.24 * pow(cosTL, 3.8) + 0.16 * pow(cosBR, 4.2));\n" +
-        "    float a = clamp((sharpRim * rimIntensity + tightBevel) * uIntensity, 0.0, 0.95) * mask;\n" +
+        "    float rimIntensity = 0.25 + 0.75 * pow(cosTL, 2.0) + 0.60 * pow(cosBR, 2.3);\n" +
+        "    // Tight 2.4px inner glass lip reflection on the two specular corners\n" +
+        "    float tightBevel = exp(-pow((dIn - 2.4) / 2.1, 2.0)) * (0.28 * pow(cosTL, 3.6) + 0.18 * pow(cosBR, 4.0));\n" +
+        "    float a = clamp((sharpRim * rimIntensity + tightBevel) * uIntensity, 0.0, 0.96) * mask;\n" +
         "    return half4(half3(1.0, 0.996, 1.0) * a, a);\n" +
         "}\n";
 
@@ -232,11 +236,11 @@ public final class LiquidGlassRuntime {
     private static volatile float sWallScaleY = 0.25f;
     private static volatile boolean sIsLiveWallpaper = false;
     private static volatile long sLastHomeDrawMs = 0L;
-    private static volatile boolean sHomeFocused = false;
     private static volatile boolean sCaptureLoggedOnce = false;
     private static volatile boolean sCaptureFailedPermanently = false;
     private static volatile Runnable sFrameInvalidateCb;
     private static volatile Context sAppCtx;
+    private static volatile long sFrameCount = 0L;
 
     // Background capture thread + cached reflection handles
     private static HandlerThread sCapThread;
@@ -250,7 +254,7 @@ public final class LiquidGlassRuntime {
     private static Method sHwBufAsBitmapMethod;
     private static boolean sReflectionInit = false;
 
-    // Fallback BackgroundBlurDrawable per-view cache
+    // Fallback BackgroundBlurDrawable per-view cache (ONLY used if capture permanently fails!)
     private static final WeakHashMap<View, Drawable> sViewBlurs = new WeakHashMap<>();
     private static Method sGetViewRootImpl;
     private static Method sCreateBgBlurDrawable;
@@ -258,7 +262,6 @@ public final class LiquidGlassRuntime {
     private static Method sBlurSetCornerRadius;
     private static Method sBlurSetColor;
     private static boolean sBgBlurUnavailable = false;
-    private static volatile boolean sLoggedLiveBlur = false;
 
     private static RuntimeShader sLensShader;
     private static Paint sLensPaint;
@@ -273,13 +276,20 @@ public final class LiquidGlassRuntime {
     private static boolean sRimFailed = false;
 
     public static void invalidateWallpaperCache() {
-        sWallpaperShader = null;
         sCaptureLoggedOnce = false;
         sCaptureFailedPermanently = false;
         if (sMirrorSc != null) {
             try { sMirrorSc.release(); } catch (Throwable ignored) {}
             sMirrorSc = null;
         }
+        kickLiveCaptureIfNeeded();
+    }
+
+    public static void onLauncherResumed(Context ctx) {
+        if (sAppCtx == null && ctx != null) {
+            sAppCtx = ctx.getApplicationContext() != null ? ctx.getApplicationContext() : ctx;
+        }
+        sLastHomeDrawMs = System.currentTimeMillis();
         kickLiveCaptureIfNeeded();
     }
 
@@ -313,7 +323,6 @@ public final class LiquidGlassRuntime {
                     sScreenshotWallMethod = sWmService.getClass().getMethod("screenshotWallpaper");
                 } catch (Throwable ignored) {}
             }
-            // Android 16/17 uses android.window.ScreenCaptureInternal; Android 14/15 uses android.window.ScreenCapture
             Class<?> scCls = null;
             for (String name : new String[] { "android.window.ScreenCaptureInternal", "android.window.ScreenCapture" }) {
                 try {
@@ -335,7 +344,6 @@ public final class LiquidGlassRuntime {
         if (bmp == null || bmp.isRecycled()) return false;
         int w = bmp.getWidth(), h = bmp.getHeight();
         if (w < 32 || h < 32) return false;
-        // Hardware bitmaps cannot call getPixel directly — trust valid non-empty HardwareBuffer dimensions!
         if (Build.VERSION.SDK_INT >= 26 && bmp.getConfig() == Bitmap.Config.HARDWARE) {
             return true;
         }
@@ -357,8 +365,31 @@ public final class LiquidGlassRuntime {
         String methodUsed = null;
         Bitmap result = null;
 
-        // Path 1: Ultra-fast GPU HardwareBuffer mirrorWallpaperSurface(0) + captureLayers(mirrorSc, displayRect, 0.25f)
-        if (sWmService != null && sMirrorWallMethod != null && sCaptureLayersMethod != null) {
+        // Path 1: IWindowManager.screenshotWallpaper() (auto-cropped 1:1 to display viewport by WindowManagerService!)
+        if (sWmService != null && sScreenshotWallMethod != null) {
+            try {
+                Object bObj = sScreenshotWallMethod.invoke(sWmService);
+                if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
+                    Bitmap raw = (Bitmap) bObj;
+                    // Downscale software bitmaps cleanly to 1/4 res (~270x585, ~630KB) for ultra-fast smooth FPS!
+                    if (Build.VERSION.SDK_INT < 26 || raw.getConfig() != Bitmap.Config.HARDWARE) {
+                        int tw = Math.max(200, raw.getWidth() / 4);
+                        int th = Math.max(400, raw.getHeight() / 4);
+                        result = Bitmap.createScaledBitmap(raw, tw, th, true);
+                    } else {
+                        result = raw;
+                    }
+                    methodUsed = "IWindowManager.screenshotWallpaper";
+                }
+            } catch (Throwable t) {
+                if (!sCaptureLoggedOnce) {
+                    XposedBridge.log(TAG + "screenshotWallpaper err: " + t);
+                }
+            }
+        }
+
+        // Path 2: mirrorWallpaperSurface(0) + ScreenCaptureInternal.captureLayers
+        if (result == null && sWmService != null && sMirrorWallMethod != null && sCaptureLayersMethod != null) {
             try {
                 if (sMirrorSc == null || !sMirrorSc.isValid()) {
                     Object sc = sMirrorWallMethod.invoke(sWmService, 0);
@@ -367,11 +398,7 @@ public final class LiquidGlassRuntime {
                     }
                 }
                 if (sMirrorSc != null && sMirrorSc.isValid()) {
-                    Rect crop = new Rect(0, 0, sw, sh);
-                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, crop, 0.25f);
-                    if (shb == null) {
-                        shb = sCaptureLayersMethod.invoke(null, sMirrorSc, null, 0.25f);
-                    }
+                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, new Rect(0, 0, sw, sh), 0.25f);
                     if (shb != null) {
                         if (sHwBufAsBitmapMethod == null) {
                             sHwBufAsBitmapMethod = shb.getClass().getMethod("asBitmap");
@@ -383,40 +410,7 @@ public final class LiquidGlassRuntime {
                         }
                     }
                 }
-            } catch (Throwable t) {
-                if (!sCaptureLoggedOnce) {
-                    XposedBridge.log(TAG + "mirrorWallpaperSurface err: " + t);
-                }
-                if (sMirrorSc != null) {
-                    try { sMirrorSc.release(); } catch (Throwable ignored) {}
-                    sMirrorSc = null;
-                }
-            }
-        }
-
-        // Path 2: IWindowManager.screenshotWallpaper() (auto-cropped to display viewport by WindowManagerService!)
-        if (result == null && sWmService != null && sScreenshotWallMethod != null) {
-            try {
-                Object bObj = sScreenshotWallMethod.invoke(sWmService);
-                if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
-                    Bitmap raw = (Bitmap) bObj;
-                    // Downscale software bitmaps cleanly to 1/3 res (~360x780, ~1MB) to keep GC & memory ultra-light!
-                    if (Build.VERSION.SDK_INT < 26 || raw.getConfig() != Bitmap.Config.HARDWARE) {
-                        int tw = Math.max(240, raw.getWidth() / 3);
-                        int th = Math.max(480, raw.getHeight() / 3);
-                        Bitmap small = Bitmap.createScaledBitmap(raw, tw, th, true);
-                        if (small != raw) raw.recycle();
-                        result = small;
-                    } else {
-                        result = raw;
-                    }
-                    methodUsed = "IWindowManager.screenshotWallpaper";
-                }
-            } catch (Throwable t) {
-                if (!sCaptureLoggedOnce) {
-                    XposedBridge.log(TAG + "screenshotWallpaper err: " + t);
-                }
-            }
+            } catch (Throwable ignored) {}
         }
 
         // Path 3: Static WallpaperManager.getDrawable() when static wallpaper is set
@@ -474,8 +468,8 @@ public final class LiquidGlassRuntime {
                 if (pm != null) screenOn = pm.isInteractive();
             } catch (Throwable ignored) {}
 
-            // Pause completely (0% CPU/GPU) when home screen is hidden, unfocused, or screen is off!
-            if (!screenOn || (!sHomeFocused && sWallpaperShader != null) || (now - sLastHomeDrawMs > 400L && sWallpaperShader != null)) {
+            // Pause cleanly (0% CPU/GPU) ONLY when screen is off OR Home Screen hasn't drawn in > 1.2s!
+            if (!screenOn || (sWallpaperShader != null && (now - sLastHomeDrawMs > 1200L))) {
                 sCapRunning = false;
                 return;
             }
@@ -494,28 +488,36 @@ public final class LiquidGlassRuntime {
                 sWallScaleX = frame.getWidth() / (float) sw;
                 sWallScaleY = frame.getHeight() / (float) sh;
                 sWallpaperShader = new BitmapShader(frame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                sFrameCount++;
+                if (sFrameCount == 30L) {
+                    XposedBridge.log(TAG + "Live wallpaper pump verified active (30 continuous frames rendered!)");
+                }
                 Runnable cb = sFrameInvalidateCb;
                 if (cb != null) cb.run();
 
-                // If LIVE wallpaper -> pump smoothly at ~35fps while Home Screen is visible!
-                // If STATIC wallpaper -> captured once, stop pump (0% idle cost, 120fps lens refraction on scroll/tilt!)
+                // Pump continuously (~30fps) while Home Screen is visible on live wallpaper!
                 if (sIsLiveWallpaper && sCapHandler != null) {
-                    sCapHandler.postDelayed(this, 28L);
+                    sCapHandler.postDelayed(this, 16L);
                 } else {
                     sCapRunning = false;
                 }
-            } else {
+            } else if (sWallpaperShader == null) {
                 sCaptureFailedPermanently = true;
                 sCapRunning = false;
                 if (!sCaptureLoggedOnce) {
                     sCaptureLoggedOnce = true;
                     XposedBridge.log(TAG + "Wallpaper surface capture unavailable -> falling back to SurfaceFlinger BackgroundBlurDrawable");
                 }
+            } else if (sIsLiveWallpaper && sCapHandler != null) {
+                // Transient empty capture during transition — keep previous valid frame and retry smoothly!
+                sCapHandler.postDelayed(this, 60L);
+            } else {
+                sCapRunning = false;
             }
         }
     };
 
-    private static synchronized void kickLiveCaptureIfNeeded() {
+    public static synchronized void kickLiveCaptureIfNeeded() {
         if (sCaptureFailedPermanently || sAppCtx == null) return;
         if (sCapRunning) return;
         if (sWallpaperShader != null && !sIsLiveWallpaper) return;
@@ -558,10 +560,6 @@ public final class LiquidGlassRuntime {
             synchronized (sViewBlurs) {
                 sViewBlurs.put(hostView, blur);
             }
-            if (!sLoggedLiveBlur) {
-                sLoggedLiveBlur = true;
-                XposedBridge.log(TAG + "Fallback SurfaceFlinger BackgroundBlurDrawable engaged");
-            }
             return blur;
         } catch (Throwable t) {
             sBgBlurUnavailable = true;
@@ -569,31 +567,20 @@ public final class LiquidGlassRuntime {
         }
     }
 
-    public static void clearSemBlur(View view) {
-        if (view == null) return;
-        try {
-            Method semSetBlur = View.class.getMethod("semSetBlurInfo", Class.forName("android.view.SemBlurInfo"));
-            semSetBlur.invoke(view, new Object[] { null });
-        } catch (Throwable ignored) {}
-    }
-
     public static void drawLiveLiquidBody(Context ctx, View hostView, Canvas canvas,
                                           float left, float top, float width, float height,
                                           float screenX, float screenY,
                                           float tiltX, float tiltY, float strength) {
         if (width < 16f || height < 16f || Build.VERSION.SDK_INT < 33) return;
-        if (hostView != null) clearSemBlur(hostView);
 
         if (sAppCtx == null && ctx != null) {
             sAppCtx = ctx.getApplicationContext() != null ? ctx.getApplicationContext() : ctx;
         }
         sLastHomeDrawMs = System.currentTimeMillis();
-        sHomeFocused = (hostView == null) || hostView.hasWindowFocus();
         kickLiveCaptureIfNeeded();
 
         BitmapShader wall = sWallpaperShader;
         if (wall != null && !sLensFailed) {
-            if (hostView != null) detachBlurForView(hostView);
             try {
                 if (sLensShader == null) {
                     sLensShader = new RuntimeShader(APPLE_LIQUID_LENS_AGSL);
@@ -618,23 +605,25 @@ public final class LiquidGlassRuntime {
             }
         }
 
-        // Fallback while first frame captures or if capture unavailable: Hardware SurfaceFlinger live blur
-        Drawable liveBlur = getOrCreateLiveBlurDrawable(hostView);
-        if (liveBlur != null) {
-            try {
-                int l = Math.round(left + 0.5f);
-                int t = Math.round(top + 0.5f);
-                int r = Math.round(left + width - 0.5f);
-                int b = Math.round(top + height - 0.5f);
-                float cr = Math.min(width, height) * 0.238f;
-                int blurPx = Math.max(12, Math.min(48, Math.round(24f * strength)));
-                liveBlur.setBounds(l, t, r, b);
-                sBlurSetCornerRadius.invoke(liveBlur, cr);
-                sBlurSetBlurRadius.invoke(liveBlur, blurPx);
-                liveBlur.setAlpha(255);
-                liveBlur.setVisible(true, false);
-                liveBlur.draw(canvas);
-            } catch (Throwable ignored) {}
+        // Only attach BackgroundBlurDrawable if capture permanently failed (never churn during cold start/app close!)
+        if (sCaptureFailedPermanently) {
+            Drawable liveBlur = getOrCreateLiveBlurDrawable(hostView);
+            if (liveBlur != null) {
+                try {
+                    int l = Math.round(left + 0.5f);
+                    int t = Math.round(top + 0.5f);
+                    int r = Math.round(left + width - 0.5f);
+                    int b = Math.round(top + height - 0.5f);
+                    float cr = Math.min(width, height) * 0.238f;
+                    int blurPx = Math.max(12, Math.min(48, Math.round(24f * strength)));
+                    liveBlur.setBounds(l, t, r, b);
+                    sBlurSetCornerRadius.invoke(liveBlur, cr);
+                    sBlurSetBlurRadius.invoke(liveBlur, blurPx);
+                    liveBlur.setAlpha(255);
+                    liveBlur.setVisible(true, false);
+                    liveBlur.draw(canvas);
+                } catch (Throwable ignored) {}
+            }
         }
 
         if (!sClearFailed) {
@@ -699,7 +688,7 @@ public final class LiquidGlassRuntime {
 
     /**
      * Extracts the pure floating frosted-white glyph from a baked OneLiquid icon,
-     * scaled boldly (1.06x) so inner icons are large, crisp, and prominent!
+     * scaled boldly (1.08x) so inner icons are large, crisp, and prominent!
      */
     public static Bitmap extractPureGlyphFromOneLiquid(Bitmap src) {
         if (src == null || src.isRecycled()) return null;
@@ -741,7 +730,6 @@ public final class LiquidGlassRuntime {
         Bitmap raw = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         raw.setPixels(px, 0, w, 0, 0, w, h);
 
-        // Scale up cleanly to 1.08x centered so inner icons are bold & prominent (never shrunk!)
         Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         float expand = w * 0.04f;

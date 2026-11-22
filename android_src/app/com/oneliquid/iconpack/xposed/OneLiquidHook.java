@@ -1,5 +1,6 @@
 package com.oneliquid.iconpack.xposed;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -20,6 +21,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.widget.TextView;
 import com.oneliquid.iconpack.ModuleStatus;
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -59,6 +61,8 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private static final Map<String, Bitmap> sPureGlyphCache = new ConcurrentHashMap<>();
     private static final Map<String, Bitmap> sFullIconCache = new ConcurrentHashMap<>();
     private static final Set<View> sActiveIcons = Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Map<View, long[]> sLastIconPos = new WeakHashMap<>();
+    private static final Set<View> sHookedRoots = Collections.newSetFromMap(new WeakHashMap<>());
     private static final AtomicInteger sHomeHooks = new AtomicInteger(0);
     private static final AtomicInteger sSysUiHooks = new AtomicInteger(0);
     private static final ThreadLocal<Boolean> sInSetIcon = new ThreadLocal<>();
@@ -230,11 +234,51 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
         }
     }
 
+    private static void registerActiveIcon(View v) {
+        if (v == null) return;
+        synchronized (sActiveIcons) {
+            sActiveIcons.add(v);
+        }
+        try {
+            final View root = v.getRootView();
+            if (root != null) {
+                boolean shouldHook;
+                synchronized (sHookedRoots) {
+                    shouldHook = sHookedRoots.add(root);
+                }
+                if (shouldHook) {
+                    final int[] tmp = new int[2];
+                    root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                        @Override
+                        public boolean onPreDraw() {
+                            if (!isEnabled() || !opt(ModuleStatus.KEY_LIVE_REFRACTION, true)) return true;
+                            synchronized (sActiveIcons) {
+                                for (View iv : sActiveIcons) {
+                                    if (iv == null || !iv.isAttachedToWindow() || !iv.isShown()) continue;
+                                    iv.getLocationOnScreen(tmp);
+                                    long packed = (((long) tmp[0]) << 32) | (tmp[1] & 0xFFFFFFFFL);
+                                    long[] prev = sLastIconPos.get(iv);
+                                    if (prev == null) {
+                                        sLastIconPos.put(iv, new long[] { packed });
+                                    } else if (prev[0] != packed) {
+                                        prev[0] = packed;
+                                        iv.invalidate();
+                                    }
+                                }
+                            }
+                            return true;
+                        }
+                    });
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
     private static void invalidateVisibleIcons() {
         synchronized (sActiveIcons) {
             for (View v : sActiveIcons) {
-                if (v != null && v.isAttachedToWindow()) {
-                    v.postInvalidate();
+                if (v != null && v.isAttachedToWindow() && v.isShown()) {
+                    v.postInvalidateOnAnimation();
                 }
             }
         }
@@ -451,31 +495,22 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             }
         });
 
+        // Wake live wallpaper refraction immediately whenever LauncherActivity resumes (e.g., swiping up from an app!)
+        try {
+            XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.thisObject instanceof Activity) {
+                        LiquidGlassRuntime.onLauncherResumed((Activity) param.thisObject);
+                        invalidateVisibleIcons();
+                    }
+                }
+            });
+        } catch (Throwable ignored) {}
+
         Class<?> iconViewCls = XposedHelpers.findClassIfExists("com.honeyspace.ui.common.iconview.IconViewImpl", cl);
         if (iconViewCls != null) {
             sHomeHooks.incrementAndGet();
-
-            // Track attached icon views for smooth zero-idle-cost gyroscope updates
-            try {
-                XposedBridge.hookAllMethods(iconViewCls, "onAttachedToWindow", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        if (param.thisObject instanceof View) {
-                            synchronized (sActiveIcons) { sActiveIcons.add((View) param.thisObject); }
-                        }
-                    }
-                });
-                XposedBridge.hookAllMethods(iconViewCls, "onDetachedFromWindow", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        if (param.thisObject instanceof View) {
-                            View v = (View) param.thisObject;
-                            synchronized (sActiveIcons) { sActiveIcons.remove(v); }
-                            LiquidGlassRuntime.detachBlurForView(v);
-                        }
-                    }
-                });
-            } catch (Throwable ignored) {}
 
             // 1. Replace icon with pure frosted glyph (when live refraction is ON) so ZERO double borders ever appear!
             try {
@@ -522,6 +557,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                         try {
                             TextView tv = (TextView) param.thisObject;
+                            registerActiveIcon(tv);
                             Canvas canvas = (Canvas) param.args[0];
                             Drawable icon = getIconFromView(tv);
                             if (icon == null) return;
@@ -562,6 +598,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                         try {
                             TextView tv = (TextView) param.thisObject;
+                            registerActiveIcon(tv);
                             Canvas canvas = (Canvas) param.args[0];
                             Drawable icon = getIconFromView(tv);
                             if (icon == null) return;
@@ -606,6 +643,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         try {
                             View v = (View) param.thisObject;
+                            registerActiveIcon(v);
                             Canvas c = (Canvas) param.args[0];
                             Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
                             int iw = (icon != null && icon.getBounds().width() >= 32)
@@ -630,6 +668,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         try {
                             View v = (View) param.thisObject;
+                            registerActiveIcon(v);
                             Canvas c = (Canvas) param.args[0];
                             Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
                             int iw = (icon != null && icon.getBounds().width() >= 32)
