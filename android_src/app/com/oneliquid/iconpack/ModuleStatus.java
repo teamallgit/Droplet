@@ -18,7 +18,6 @@ public final class ModuleStatus {
     public static final String KEY_LIVE_REFRACTION = "opt_live_refraction";
     public static final String KEY_GYRO_TILT = "opt_gyro_tilt";
     public static final String KEY_GLASS_FOLDERS = "opt_glass_folders";
-    public static final String KEY_GLASS_WIDGETS = "opt_glass_widgets";
     public static final String KEY_SYSTEMUI_GLASS = "opt_systemui_glass";
     // 0 = Subtle, 1 = iOS 26 Balanced, 2 = Liquid Syrup (Strong Refraction & Magnification)
     public static final String KEY_REFRACTION_LEVEL = "opt_refraction_level";
@@ -37,7 +36,7 @@ public final class ModuleStatus {
     }
 
     public static String getModuleVersion() {
-        return "2.4.0";
+        return "2.4.1";
     }
 
     public static int getOneUiVersionInt() {

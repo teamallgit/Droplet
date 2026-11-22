@@ -358,10 +358,6 @@ public class MainActivity extends Activity {
                 "Live refracting continuous-squircle glass folders on Home Screen",
                 ModuleStatus.KEY_GLASS_FOLDERS, true, false));
         featCard.addView(makeSwitchRow(
-                "iOS 26 Liquid Glass Widgets",
-                "Clear magnifying Liquid Glass cards & specular rims on Home Screen widgets",
-                ModuleStatus.KEY_GLASS_WIDGETS, true, false));
-        featCard.addView(makeSwitchRow(
                 "SystemUI Glass Polish",
                 "Subtle Liquid Glass specular rims on QS tiles & notification cards",
                 ModuleStatus.KEY_SYSTEMUI_GLASS, true, false));
