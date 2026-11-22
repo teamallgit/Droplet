@@ -485,8 +485,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             Drawable orig = (Drawable) param.args[0];
                             ComponentName cn = extractComponent(param.thisObject);
                             String lbl = extractLabel(param.thisObject);
-                            boolean liveRef = opt(ModuleStatus.KEY_LIVE_REFRACTION, true)
-                                    && LiquidGlassRuntime.ensureWallpaperShader(v.getContext()) != null;
+                            boolean liveRef = opt(ModuleStatus.KEY_LIVE_REFRACTION, true);
                             int sz = Math.max(orig.getIntrinsicWidth(), 192);
                             Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, orig, sz, liveRef);
                             if (themed != null) {
@@ -539,8 +538,8 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             int sw = Math.max(tv.getResources().getDisplayMetrics().widthPixels, 1080);
                             float scrollShift = ((screenX + boxW * 0.5f) / (float) sw) * 2.0f - 1.0f;
 
-                            LiquidGlassRuntime.drawLiveLiquidLensBody(
-                                    tv.getContext(), canvas, left, top, boxW, boxH,
+                            LiquidGlassRuntime.drawLiveLiquidBody(
+                                    tv.getContext(), tv, canvas, left, top, boxW, boxH,
                                     screenX, screenY,
                                     tx + scrollShift * 0.18f, ty,
                                     getRefractionStrength()
@@ -611,8 +610,8 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             v.getLocationOnScreen(loc);
                             float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
-                            LiquidGlassRuntime.drawLiveLiquidLensBody(
-                                    v.getContext(), c, left, top, iw - 2f * insetX, ih - 2f * insetY,
+                            LiquidGlassRuntime.drawLiveLiquidBody(
+                                    v.getContext(), v, c, left, top, iw - 2f * insetX, ih - 2f * insetY,
                                     loc[0] + left, loc[1] + top, tx, ty, getRefractionStrength());
                         } catch (Throwable ignored) {}
                     }
