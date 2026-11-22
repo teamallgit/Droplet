@@ -40,7 +40,7 @@ public final class ModuleStatus {
     }
 
     public static String getModuleVersion() {
-        return "2.5.0";
+        return "2.5.1";
     }
 
     public static int getOneUiVersionInt() {

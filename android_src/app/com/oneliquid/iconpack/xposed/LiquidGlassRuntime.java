@@ -28,6 +28,7 @@ import android.os.Process;
 import android.util.DisplayMetrics;
 import android.view.SurfaceControl;
 import android.view.View;
+import android.view.WindowManager;
 import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
@@ -51,9 +52,12 @@ public final class LiquidGlassRuntime {
 
     private static final String TAG = "OneLiquid-Glass: ";
 
-    // Ultra-fast small working texture size (~180 KB per bitmap -> ~1.1ms 2-pass blur!)
-    private static final int CAP_W = 144;
-    private static final int CAP_H = 312;
+    // Crisp 1/4-res Home texture (270x585 -> ~2.5ms background blur + GPU FILTER_MODE_LINEAR = zero pixelation!)
+    // + ultra-silky 90x195 2-pass blurred App Drawer texture (~0.3ms + FILTER_MODE_LINEAR = ~140px smooth Gaussian!)
+    private static final int CAP_W = 270;
+    private static final int CAP_H = 585;
+    private static final int DRAWER_W = 90;
+    private static final int DRAWER_H = 195;
 
     public static final class PureGlyphDrawable extends BitmapDrawable {
         public PureGlyphDrawable(Resources res, Bitmap bitmap) {
@@ -104,7 +108,7 @@ public final class LiquidGlassRuntime {
         "    float2 norm = squircleNormal(p, b, 4.5);\n" +
         "\n" +
         "    // 1. REAL CONVEX LENS MAGNIFICATION (controlled live by Magnification slider!)\n" +
-        "    float effStr = uStrength * mix(1.0, 0.72, uDrawerMode);\n" +
+        "    float effStr = uStrength * mix(1.0, 0.52, uDrawerMode);\n" +
         "    float zoomFrac = clamp(0.58 * effStr, 0.14, 0.76);\n" +
         "    float2 pn = p / max(halfSize, float2(1.0));\n" +
         "    float r2 = clamp(dot(pn, pn), 0.0, 1.4);\n" +
@@ -267,10 +271,14 @@ public final class LiquidGlassRuntime {
     private static volatile int sLastRawW = CAP_W;
     private static volatile int sLastRawH = CAP_H;
     private static volatile int sLastBuiltBlurRadius = -1;
-    private static volatile float sWallScaleX = 0.1333f;
-    private static volatile float sWallScaleY = 0.1333f;
+    private static volatile float sWallScaleX = 0.25f;
+    private static volatile float sWallScaleY = 0.25f;
+    private static volatile float sDrawerWallScaleX = 0.0833f;
+    private static volatile float sDrawerWallScaleY = 0.0833f;
     private static volatile float sCurrentFrost = 0.28f;
     private static volatile boolean sIsLiveWallpaper = false;
+    private static volatile int sLastWallpaperId = -1;
+    private static volatile boolean sUsedFallbackCapture = false;
     private static volatile long sLastHomeDrawMs = 0L;
     private static volatile long sLastMotionMs = 0L;
     private static volatile boolean sCaptureLoggedOnce = false;
@@ -336,6 +344,25 @@ public final class LiquidGlassRuntime {
         sCaptureFailedPermanently = false;
         sConsecutiveFails = 0;
         sLastHomeDrawMs = System.currentTimeMillis();
+        // Detect static/live wallpaper changes even if Samsung's picker skips ACTION_WALLPAPER_CHANGED,
+        // and upgrade away from any lock-screen fallback capture!
+        boolean needRefresh = sUsedFallbackCapture;
+        try {
+            if (sAppCtx != null && Build.VERSION.SDK_INT >= 24) {
+                WallpaperManager wm = WallpaperManager.getInstance(sAppCtx);
+                int curId = wm.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
+                if (curId != sLastWallpaperId) {
+                    sLastWallpaperId = curId;
+                    needRefresh = true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        if (needRefresh) {
+            sHomeWallShader = null;
+            sDrawerWallShader = null;
+            sLastRawPixels = null;
+            sCaptureLoggedOnce = false;
+        }
         kickLiveCaptureIfNeeded();
     }
 
@@ -363,8 +390,35 @@ public final class LiquidGlassRuntime {
     }
 
     private static int frostToBlurRadius(float frost01) {
-        // Maps user's Clear <-> Frosted slider (0..1) cleanly to 0..5 px in 144x312 (~0..37px screen blur!)
-        return Math.max(0, Math.min(5, Math.round(frost01 * 5.0f)));
+        // Maps user's Clear <-> Frosted slider (0..1) cleanly to 0..8 px in 270x585 (~0..36px smooth blur!)
+        return Math.max(0, Math.min(8, Math.round(frost01 * 8.0f)));
+    }
+
+    private static BitmapShader makeLinearShader(Bitmap bmp) {
+        BitmapShader sh = new BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        if (Build.VERSION.SDK_INT >= 33) {
+            sh.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+        }
+        return sh;
+    }
+
+    private static void getRealScreenSize(Context ctx, int[] out) {
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+                if (wm != null) {
+                    Rect b = wm.getMaximumWindowMetrics().getBounds();
+                    if (b.width() >= 720 && b.height() >= 1280) {
+                        out[0] = b.width();
+                        out[1] = b.height();
+                        return;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        out[0] = Math.max(dm.widthPixels, 720);
+        out[1] = Math.max(dm.heightPixels, 1280);
     }
 
     public static void setFrameInvalidateCallback(Runnable cb) {
@@ -460,8 +514,8 @@ public final class LiquidGlassRuntime {
         int w = sLastRawW, h = sLastRawH;
         int r = frostToBlurRadius(sCurrentFrost);
         sLastBuiltBlurRadius = r;
-        Bitmap homeBmp = buildPreBlurredBitmap(raw, w, h, r, r >= 3 ? 2 : 1, false);
-        sHomeWallShader = new BitmapShader(homeBmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        Bitmap homeBmp = buildPreBlurredBitmap(raw, w, h, r, r >= 4 ? 2 : 1, false);
+        sHomeWallShader = makeLinearShader(homeBmp);
         Runnable cb = sFrameInvalidateCb;
         if (cb != null) cb.run();
     }
@@ -523,45 +577,21 @@ public final class LiquidGlassRuntime {
         String methodUsed = null;
         Bitmap raw = null;
 
-        // Path 1: IWindowManager.screenshotWallpaper() (auto-cropped 1:1 to display viewport!)
+        // Path 1: IWindowManager.screenshotWallpaper() (exact 1:1 display-aligned viewport!)
         if (sWmService != null && sScreenshotWallMethod != null) {
             try {
                 Object bObj = sScreenshotWallMethod.invoke(sWmService);
                 if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
                     raw = (Bitmap) bObj;
                     methodUsed = "IWindowManager.screenshotWallpaper";
+                    sUsedFallbackCapture = false;
                 }
             } catch (Throwable t) {
                 if (!sCaptureLoggedOnce) XposedBridge.log(TAG + "screenshotWallpaper err: " + t);
             }
         }
 
-        // Path 2: mirrorWallpaperSurface(0) + ScreenCaptureInternal.captureLayers
-        if (raw == null && sWmService != null && sMirrorWallMethod != null && sCaptureLayersMethod != null) {
-            try {
-                if (sMirrorSc == null || !sMirrorSc.isValid()) {
-                    Object sc = sMirrorWallMethod.invoke(sWmService, 0);
-                    if (sc instanceof SurfaceControl && ((SurfaceControl) sc).isValid()) {
-                        sMirrorSc = (SurfaceControl) sc;
-                    }
-                }
-                if (sMirrorSc != null && sMirrorSc.isValid()) {
-                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, new Rect(0, 0, sw, sh), 0.15f);
-                    if (shb != null) {
-                        if (sHwBufAsBitmapMethod == null) {
-                            sHwBufAsBitmapMethod = shb.getClass().getMethod("asBitmap");
-                        }
-                        Object bObj = sHwBufAsBitmapMethod.invoke(shb);
-                        if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
-                            raw = (Bitmap) bObj;
-                            methodUsed = "mirrorWallpaperSurface+captureLayers";
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // Path 3: Static WallpaperManager.getDrawable()
+        // Path 2: Static WallpaperManager.getDrawable() (exact center-crop to display aspect ratio!)
         if (raw == null) {
             try {
                 WallpaperManager wm = WallpaperManager.getInstance(ctx);
@@ -582,8 +612,35 @@ public final class LiquidGlassRuntime {
                         if (isBitmapNonBlack(b)) {
                             raw = b;
                             methodUsed = "WallpaperManager.getDrawable";
+                            sUsedFallbackCapture = false;
                         } else {
                             b.recycle();
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // Path 3 (last-resort fallback only): mirrorWallpaperSurface(0) + captureLayers (full bounds, no zoomed crop!)
+        if (raw == null && sWmService != null && sMirrorWallMethod != null && sCaptureLayersMethod != null) {
+            try {
+                if (sMirrorSc == null || !sMirrorSc.isValid()) {
+                    Object sc = sMirrorWallMethod.invoke(sWmService, 0);
+                    if (sc instanceof SurfaceControl && ((SurfaceControl) sc).isValid()) {
+                        sMirrorSc = (SurfaceControl) sc;
+                    }
+                }
+                if (sMirrorSc != null && sMirrorSc.isValid()) {
+                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, null, 0.25f);
+                    if (shb != null) {
+                        if (sHwBufAsBitmapMethod == null) {
+                            sHwBufAsBitmapMethod = shb.getClass().getMethod("asBitmap");
+                        }
+                        Object bObj = sHwBufAsBitmapMethod.invoke(shb);
+                        if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
+                            raw = (Bitmap) bObj;
+                            methodUsed = "mirrorWallpaperSurface+captureLayers";
+                            sUsedFallbackCapture = true;
                         }
                     }
                 }
@@ -644,11 +701,15 @@ public final class LiquidGlassRuntime {
             try {
                 WallpaperManager wm = WallpaperManager.getInstance(ctx);
                 sIsLiveWallpaper = (wm.getWallpaperInfo() != null);
+                if (Build.VERSION.SDK_INT >= 24) {
+                    sLastWallpaperId = wm.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
+                }
             } catch (Throwable ignored) {}
 
-            DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-            int sw = Math.max(dm.widthPixels, 720);
-            int sh = Math.max(dm.heightPixels, 1280);
+            int[] realSize = new int[2];
+            getRealScreenSize(ctx, realSize);
+            int sw = realSize[0];
+            int sh = realSize[1];
 
             Bitmap small = captureSmallSoftwareFrame(ctx, sw, sh);
             if (small != null) {
@@ -657,7 +718,6 @@ public final class LiquidGlassRuntime {
                 int w = small.getWidth(), h = small.getHeight();
                 int[] rawPx = new int[w * h];
                 small.getPixels(rawPx, 0, w, 0, 0, w, h);
-                small.recycle();
 
                 sLastRawPixels = rawPx;
                 sLastRawW = w;
@@ -665,15 +725,23 @@ public final class LiquidGlassRuntime {
                 sWallScaleX = w / (float) sw;
                 sWallScaleY = h / (float) sh;
 
-                // 1. Pre-blur Home Screen glass texture (scaled by user's Frost slider!)
+                // 1. Pre-blur Home Screen glass texture (270x585 + GPU FILTER_MODE_LINEAR = silky zero-pixelation!)
                 int homeBlurR = frostToBlurRadius(sCurrentFrost);
                 sLastBuiltBlurRadius = homeBlurR;
-                Bitmap homeBmp = buildPreBlurredBitmap(rawPx, w, h, homeBlurR, homeBlurR >= 3 ? 2 : 1, false);
-                sHomeWallShader = new BitmapShader(homeBmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                Bitmap homeBmp = buildPreBlurredBitmap(rawPx, w, h, homeBlurR, homeBlurR >= 4 ? 2 : 1, false);
+                sHomeWallShader = makeLinearShader(homeBmp);
 
-                // 2. Pre-blur Extra-Blurred App Drawer texture (~85px smooth blur + subtle dim to match One UI App Drawer!)
-                Bitmap drawerBmp = buildPreBlurredBitmap(rawPx, w, h, 11, 2, true);
-                sDrawerWallShader = new BitmapShader(drawerBmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                // 2. Pre-blur App Drawer texture (90x195 2-pass r=8 + FILTER_MODE_LINEAR = silky ~140px Gaussian!)
+                Bitmap tiny = Bitmap.createScaledBitmap(small, DRAWER_W, DRAWER_H, true);
+                small.recycle();
+                int dw = tiny.getWidth(), dh = tiny.getHeight();
+                int[] drawerRaw = new int[dw * dh];
+                tiny.getPixels(drawerRaw, 0, dw, 0, 0, dw, dh);
+                tiny.recycle();
+                Bitmap drawerBmp = buildPreBlurredBitmap(drawerRaw, dw, dh, 8, 2, true);
+                sDrawerWallScaleX = dw / (float) sw;
+                sDrawerWallScaleY = dh / (float) sh;
+                sDrawerWallShader = makeLinearShader(drawerBmp);
 
                 sFrameCount++;
                 if (sFrameCount == 15L) {
@@ -773,9 +841,8 @@ public final class LiquidGlassRuntime {
         sLastHomeDrawMs = System.currentTimeMillis();
         kickLiveCaptureIfNeeded();
 
-        BitmapShader wall = isAppDrawer
-                ? (sDrawerWallShader != null ? sDrawerWallShader : sHomeWallShader)
-                : sHomeWallShader;
+        boolean useDrawerShader = isAppDrawer && (sDrawerWallShader != null);
+        BitmapShader wall = useDrawerShader ? sDrawerWallShader : sHomeWallShader;
 
         if (wall != null && !sLensFailed) {
             try {
@@ -786,7 +853,9 @@ public final class LiquidGlassRuntime {
                 sLensShader.setInputShader("uWallpaper", wall);
                 sLensShader.setFloatUniform("uSize", width, height);
                 sLensShader.setFloatUniform("uScreenPos", screenX, screenY);
-                sLensShader.setFloatUniform("uWallScale", sWallScaleX, sWallScaleY);
+                sLensShader.setFloatUniform("uWallScale",
+                        useDrawerShader ? sDrawerWallScaleX : sWallScaleX,
+                        useDrawerShader ? sDrawerWallScaleY : sWallScaleY);
                 sLensShader.setFloatUniform("uTilt", tiltX, tiltY);
                 sLensShader.setFloatUniform("uStrength", strength);
                 sLensShader.setFloatUniform("uFrost", frost01);
