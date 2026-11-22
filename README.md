@@ -19,7 +19,8 @@
 - **Built-In LSPosed Module (One UI 8 / 8.5 / 9+)** — Distributed inside the exact same `OneLiquid.apk` with an in-app **ON / OFF master toggle**, **Glass & Refraction Strength selector (`Subtle` / `iOS 26` / `Liquid Syrup`)**, **live 6-point status checklist**, and **Restart SystemUI / Restart One UI Home** controls:
   - **Real-Time Live Wallpaper Magnification & Snell's-Law Refraction**: Captures the live wallpaper layer directly via `IWindowManager.screenshotWallpaper()` / `mirrorWallpaperSurface` on a self-gating background thread (~30fps while visible, 0% idle CPU when hidden or screen off) and runs a Euclidean-SDF AGSL convex lens shader on every icon — **genuinely magnifying (~2.25× at `iOS 26`, up to ~3.2× at `Liquid Syrup`) the moving wallpaper inside each icon** with crisp curved-edge refraction and prismatic RGB dispersion.
   - **GitHub-Exact Euclidean Squircle Specular Rim**: Exact AGSL port of our `512px` supersampled specular border with uniform Euclidean-corrected corner thickness and gyroscope-reactive diagonal catchlights (`-135°` TL & `+45°` BR) — zero artificial inner frame groove.
-  - **1:1 Floating Frosted Glyphs & Glass Folders**: Strips static baked plates so bold, full-sized translucent frosted-white glyphs float physically inside each live magnifying glass droplet (zero double borders).
+  - **1:1 Floating Frosted Glyphs & Glass Folders**: Strips static baked plates so bold, full-sized translucent frosted-white glyphs float physically inside each silky frosted, magnifying glass droplet (zero double borders).
+  - **iOS 26 Clear Liquid Glass Widgets**: Transforms Home Screen widgets (Weather, Calendar, Clock, etc.) into silky frosted, live-magnifying Clear Liquid Glass cards with razor-sharp anisotropic Fresnel specular rims.
   - **SystemUI Glass Polish**: Subtle translucent Liquid Glass specular rims in `com.android.systemui`.
 
 ## Icon Preview (288 of 1,020+ Icons)
