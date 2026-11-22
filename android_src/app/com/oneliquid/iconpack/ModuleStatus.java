@@ -19,10 +19,12 @@ public final class ModuleStatus {
     public static final String KEY_GYRO_TILT = "opt_gyro_tilt";
     public static final String KEY_GLASS_FOLDERS = "opt_glass_folders";
     public static final String KEY_SYSTEMUI_GLASS = "opt_systemui_glass";
-    // Sliders (0..100): Clarity/Frost, Magnification/Refraction, Corner Light Glow
+    // Sliders (0..100): Clarity/Frost, Magnification/Refraction, Corner Light Glow, Glass Tint
     public static final String KEY_FROST_AMOUNT = "opt_frost_amount";
     public static final String KEY_MAG_AMOUNT = "opt_mag_amount";
     public static final String KEY_GLOW_AMOUNT = "opt_glow_amount";
+    public static final String KEY_TINT_COLOR = "opt_tint_color";
+    public static final String KEY_TINT_STRENGTH = "opt_tint_strength";
     // Legacy fallback key
     public static final String KEY_REFRACTION_LEVEL = "opt_refraction_level";
 
@@ -40,7 +42,7 @@ public final class ModuleStatus {
     }
 
     public static String getModuleVersion() {
-        return "2.5.2";
+        return "2.6.0";
     }
 
     public static int getOneUiVersionInt() {

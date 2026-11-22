@@ -179,8 +179,8 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.oneliquid.iconpack"
-    android:versionCode="19"
-    android:versionName="2.5.2">
+    android:versionCode="20"
+    android:versionName="2.6.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 

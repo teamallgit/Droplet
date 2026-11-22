@@ -28,6 +28,7 @@ import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.GridView;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -81,6 +82,11 @@ public class MainActivity extends Activity {
     private LinearLayout setupGuideCard;
     private LinearLayout slidersCard;
     private LinearLayout togglesCard;
+    private View tintStrengthRow;
+    private SeekBar tintStrengthSeek;
+    private TextView tintStrengthValLbl;
+    private TextView tintNameLbl;
+    private final List<View> tintSwatchViews = new ArrayList<>();
     private final List<View> lsposedControls = new ArrayList<>();
     private LinearLayout statusListContainer;
     private Button restartHomeBtn;
@@ -308,6 +314,8 @@ public class MainActivity extends Activity {
             int frost = prefs.getInt(ModuleStatus.KEY_FROST_AMOUNT, 28);
             int mag = prefs.getInt(ModuleStatus.KEY_MAG_AMOUNT, 62);
             int glow = prefs.getInt(ModuleStatus.KEY_GLOW_AMOUNT, 78);
+            int tintColor = prefs.getInt(ModuleStatus.KEY_TINT_COLOR, 0);
+            int tintStr = prefs.getInt(ModuleStatus.KEY_TINT_STRENGTH, 0);
 
             for (String pkg : new String[] { ModuleStatus.PKG_ONEUI_HOME, ModuleStatus.PKG_SYSTEMUI }) {
                 Intent i = new Intent(ModuleStatus.ACTION_RELOAD_PREFS);
@@ -321,6 +329,8 @@ public class MainActivity extends Activity {
                 i.putExtra(ModuleStatus.KEY_FROST_AMOUNT, frost);
                 i.putExtra(ModuleStatus.KEY_MAG_AMOUNT, mag);
                 i.putExtra(ModuleStatus.KEY_GLOW_AMOUNT, glow);
+                i.putExtra(ModuleStatus.KEY_TINT_COLOR, tintColor);
+                i.putExtra(ModuleStatus.KEY_TINT_STRENGTH, tintStr);
                 sendBroadcast(i);
             }
         } catch (Throwable ignored) {}
@@ -351,6 +361,13 @@ public class MainActivity extends Activity {
 
         for (View v : lsposedControls) {
             v.setEnabled(controlsEnabled);
+        }
+        boolean hasTint = prefs.getInt(ModuleStatus.KEY_TINT_COLOR, 0) != 0;
+        if (tintStrengthRow != null) {
+            tintStrengthRow.setAlpha((controlsEnabled && hasTint) ? 1.0f : 0.40f);
+        }
+        if (tintStrengthSeek != null) {
+            tintStrengthSeek.setEnabled(controlsEnabled && hasTint);
         }
     }
 
@@ -455,6 +472,11 @@ public class MainActivity extends Activity {
                 "Bright",
                 ModuleStatus.KEY_GLOW_AMOUNT,
                 78));
+        slidersCard.addView(makeDivider());
+        slidersCard.addView(makeTintPickerRow());
+        slidersCard.addView(makeDivider());
+        tintStrengthRow = makeTintStrengthSliderRow();
+        slidersCard.addView(tintStrengthRow);
 
         content.addView(slidersCard, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -613,6 +635,276 @@ public class MainActivity extends Activity {
 
         TextView rh = new TextView(this);
         rh.setText(rightHint);
+        rh.setTextColor(COL_TEXT_SEC);
+        rh.setTextSize(11.5f);
+        hints.addView(rh);
+        wrap.addView(hints);
+
+        return wrap;
+    }
+
+    private static final String[] TINT_NAMES = {
+            "None", "Blue", "Cyan", "Indigo", "Purple", "Pink", "Red", "Amber", "Mint", "Dark"
+    };
+    private static final int[] TINT_COLORS = {
+            0,
+            Color.parseColor("#3B82F6"),
+            Color.parseColor("#06B6D4"),
+            Color.parseColor("#6366F1"),
+            Color.parseColor("#A855F7"),
+            Color.parseColor("#EC4899"),
+            Color.parseColor("#EF4444"),
+            Color.parseColor("#F59E0B"),
+            Color.parseColor("#10B981"),
+            Color.parseColor("#181C24")
+    };
+
+    private View makeTintPickerRow() {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(20), dp(14), dp(20), dp(14));
+
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText("Glass tint");
+        title.setTextColor(COL_TEXT_PRI);
+        title.setTextSize(15.5f);
+        topRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        tintNameLbl = new TextView(this);
+        tintNameLbl.setTextColor(COL_ACCENT);
+        tintNameLbl.setTextSize(14f);
+        tintNameLbl.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        topRow.addView(tintNameLbl);
+        wrap.addView(topRow);
+
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        hsv.setPadding(0, dp(12), 0, dp(2));
+
+        LinearLayout swatches = new LinearLayout(this);
+        swatches.setOrientation(LinearLayout.HORIZONTAL);
+        swatches.setGravity(Gravity.CENTER_VERTICAL);
+        tintSwatchViews.clear();
+
+        for (int i = 0; i < TINT_COLORS.length; i++) {
+            final int col = TINT_COLORS[i];
+            TextView dot = new TextView(this);
+            dot.setGravity(Gravity.CENTER);
+            dot.setTextSize(13f);
+            dot.setTextColor(COL_TEXT_SEC);
+            if (col == 0) dot.setText("✕");
+            dot.setTag(col);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(34), dp(34));
+            lp.rightMargin = dp(10);
+            dot.setLayoutParams(lp);
+            dot.setOnClickListener(v -> selectTintColor(col));
+            lsposedControls.add(dot);
+            tintSwatchViews.add(dot);
+            swatches.addView(dot);
+        }
+
+        // Custom RGB tint button
+        TextView customBtn = new TextView(this);
+        customBtn.setText("+");
+        customBtn.setGravity(Gravity.CENTER);
+        customBtn.setTextSize(18f);
+        customBtn.setTextColor(COL_TEXT_PRI);
+        customBtn.setTag(-1);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(dp(34), dp(34));
+        customBtn.setLayoutParams(clp);
+        customBtn.setOnClickListener(v -> showCustomTintDialog());
+        lsposedControls.add(customBtn);
+        tintSwatchViews.add(customBtn);
+        swatches.addView(customBtn);
+
+        hsv.addView(swatches);
+        wrap.addView(hsv);
+        refreshTintSwatches();
+        return wrap;
+    }
+
+    private void selectTintColor(int color) {
+        SharedPreferences.Editor ed = prefs.edit().putInt(ModuleStatus.KEY_TINT_COLOR, color);
+        if (color != 0 && prefs.getInt(ModuleStatus.KEY_TINT_STRENGTH, 0) == 0) {
+            ed.putInt(ModuleStatus.KEY_TINT_STRENGTH, 45);
+            if (tintStrengthSeek != null) tintStrengthSeek.setProgress(45);
+            if (tintStrengthValLbl != null) tintStrengthValLbl.setText("45%");
+        }
+        ed.commit();
+        refreshTintSwatches();
+        applyLsposedInteractivityState();
+        notifyHooksPrefsChanged();
+    }
+
+    private void refreshTintSwatches() {
+        int cur = prefs.getInt(ModuleStatus.KEY_TINT_COLOR, 0);
+        String name = null;
+        for (int i = 0; i < TINT_COLORS.length; i++) {
+            if (TINT_COLORS[i] == cur) {
+                name = TINT_NAMES[i];
+                break;
+            }
+        }
+        boolean isCustom = (cur != 0 && name == null);
+        if (tintNameLbl != null) {
+            tintNameLbl.setText(isCustom ? String.format("#%06X", (0xFFFFFF & cur)) : (name != null ? name : "None"));
+        }
+        for (View v : tintSwatchViews) {
+            int tag = (v.getTag() instanceof Integer) ? (Integer) v.getTag() : 0;
+            if (tag == -1) {
+                GradientDrawable bg = new GradientDrawable();
+                bg.setShape(GradientDrawable.OVAL);
+                bg.setColor(isCustom ? cur : Color.parseColor("#2E2E34"));
+                bg.setStroke(dp(isCustom ? 3 : 1), isCustom ? Color.WHITE : Color.parseColor("#55555E"));
+                v.setBackground(bg);
+            } else {
+                boolean sel = (tag == cur);
+                GradientDrawable bg = new GradientDrawable();
+                bg.setShape(GradientDrawable.OVAL);
+                bg.setColor(tag == 0 ? Color.parseColor("#26262C") : tag);
+                bg.setStroke(dp(sel ? 3 : 1), sel ? Color.WHITE : Color.parseColor("#44FFFFFF"));
+                v.setBackground(bg);
+            }
+        }
+    }
+
+    private void showCustomTintDialog() {
+        int cur = prefs.getInt(ModuleStatus.KEY_TINT_COLOR, 0);
+        if (cur == 0) cur = Color.parseColor("#3B82F6");
+        final int[] rgb = new int[] { Color.red(cur), Color.green(cur), Color.blue(cur) };
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(16), dp(22), dp(8));
+
+        LinearLayout prevRow = new LinearLayout(this);
+        prevRow.setOrientation(LinearLayout.HORIZONTAL);
+        prevRow.setGravity(Gravity.CENTER_VERTICAL);
+        prevRow.setPadding(0, 0, 0, dp(14));
+
+        final View prevDot = new View(this);
+        LinearLayout.LayoutParams pdLp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        pdLp.rightMargin = dp(12);
+        prevRow.addView(prevDot, pdLp);
+
+        final TextView hexLbl = new TextView(this);
+        hexLbl.setTextColor(COL_TEXT_PRI);
+        hexLbl.setTextSize(16f);
+        hexLbl.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        prevRow.addView(hexLbl);
+        box.addView(prevRow);
+
+        final Runnable updatePrev = () -> {
+            int c = Color.rgb(rgb[0], rgb[1], rgb[2]);
+            GradientDrawable gd = new GradientDrawable();
+            gd.setShape(GradientDrawable.OVAL);
+            gd.setColor(c);
+            gd.setStroke(dp(2), Color.WHITE);
+            prevDot.setBackground(gd);
+            hexLbl.setText(String.format("#%06X", (0xFFFFFF & c)));
+        };
+        updatePrev.run();
+
+        String[] chLabels = { "Red", "Green", "Blue" };
+        int[] chColors = { Color.parseColor("#EF4444"), Color.parseColor("#10B981"), Color.parseColor("#3B82F6") };
+        for (int idx = 0; idx < 3; idx++) {
+            final int ch = idx;
+            TextView lbl = new TextView(this);
+            lbl.setText(chLabels[idx]);
+            lbl.setTextColor(COL_TEXT_SEC);
+            lbl.setTextSize(12.5f);
+            box.addView(lbl);
+
+            SeekBar sb = new SeekBar(this);
+            sb.setMax(255);
+            sb.setProgress(rgb[idx]);
+            if (Build.VERSION.SDK_INT >= 21) {
+                sb.setProgressTintList(ColorStateList.valueOf(chColors[idx]));
+                sb.setThumbTintList(ColorStateList.valueOf(Color.WHITE));
+            }
+            sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    rgb[ch] = progress;
+                    updatePrev.run();
+                }
+                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+                @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            });
+            box.addView(sb);
+        }
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Custom glass tint")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Apply", (d, w) -> selectTintColor(Color.rgb(rgb[0], rgb[1], rgb[2])))
+                .show();
+    }
+
+    private View makeTintStrengthSliderRow() {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(20), dp(14), dp(20), dp(14));
+
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText("Tint strength");
+        title.setTextColor(COL_TEXT_PRI);
+        title.setTextSize(15.5f);
+        topRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        int curVal = prefs.getInt(ModuleStatus.KEY_TINT_STRENGTH, 0);
+        tintStrengthValLbl = new TextView(this);
+        tintStrengthValLbl.setText(curVal + "%");
+        tintStrengthValLbl.setTextColor(COL_ACCENT);
+        tintStrengthValLbl.setTextSize(14f);
+        tintStrengthValLbl.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        topRow.addView(tintStrengthValLbl);
+        wrap.addView(topRow);
+
+        tintStrengthSeek = new SeekBar(this);
+        tintStrengthSeek.setMax(100);
+        tintStrengthSeek.setProgress(curVal);
+        tintStrengthSeek.setPadding(dp(6), dp(10), dp(6), dp(4));
+        styleSeekBar(tintStrengthSeek);
+        lsposedControls.add(tintStrengthSeek);
+
+        tintStrengthSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tintStrengthValLbl.setText(progress + "%");
+                if (fromUser) {
+                    prefs.edit().putInt(ModuleStatus.KEY_TINT_STRENGTH, progress).apply();
+                    notifyHooksPrefsChanged();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.edit().putInt(ModuleStatus.KEY_TINT_STRENGTH, seekBar.getProgress()).commit();
+                notifyHooksPrefsChanged();
+            }
+        });
+        wrap.addView(tintStrengthSeek, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout hints = new LinearLayout(this);
+        hints.setOrientation(LinearLayout.HORIZONTAL);
+        TextView lh = new TextView(this);
+        lh.setText("Subtle");
+        lh.setTextColor(COL_TEXT_SEC);
+        lh.setTextSize(11.5f);
+        hints.addView(lh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView rh = new TextView(this);
+        rh.setText("Vivid");
         rh.setTextColor(COL_TEXT_SEC);
         rh.setTextSize(11.5f);
         hints.addView(rh);

@@ -80,6 +80,8 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private static volatile float sCachedFrost = 0.28f;
     private static volatile float sCachedMagStrength = 1.05f;
     private static volatile float sCachedCornerGlow = 0.90f;
+    private static volatile int sCachedTintColor = 0;
+    private static volatile float sCachedTintStrength = 0f;
 
     // Live smoothed gyroscope/gravity tilt vector in [-1..1]
     private static volatile float sTiltX = 0f;
@@ -119,6 +121,11 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
 
             int glowPct = p.getInt(ModuleStatus.KEY_GLOW_AMOUNT, 78);
             sCachedCornerGlow = (Math.max(0, Math.min(100, glowPct)) / 100f) * 1.15f;
+
+            sCachedTintColor = p.getInt(ModuleStatus.KEY_TINT_COLOR, 0);
+            int tintPct = p.getInt(ModuleStatus.KEY_TINT_STRENGTH, 0);
+            sCachedTintStrength = Math.max(0f, Math.min(1f, tintPct / 100f));
+
             LiquidGlassRuntime.setFrostLevel(sCachedFrost);
             sPrefsInit = true;
         } catch (Throwable ignored) {}
@@ -155,6 +162,13 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             if (intent.hasExtra(ModuleStatus.KEY_GLOW_AMOUNT)) {
                 int glowPct = intent.getIntExtra(ModuleStatus.KEY_GLOW_AMOUNT, 78);
                 sCachedCornerGlow = (Math.max(0, Math.min(100, glowPct)) / 100f) * 1.15f;
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_TINT_COLOR)) {
+                sCachedTintColor = intent.getIntExtra(ModuleStatus.KEY_TINT_COLOR, 0);
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_TINT_STRENGTH)) {
+                int tintPct = intent.getIntExtra(ModuleStatus.KEY_TINT_STRENGTH, 0);
+                sCachedTintStrength = Math.max(0f, Math.min(1f, tintPct / 100f));
             }
             sPrefsInit = true;
         } catch (Throwable ignored) {}
@@ -195,6 +209,16 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private static float getCornerGlowIntensity() {
         if (!sPrefsInit) syncPrefCache();
         return sCachedCornerGlow;
+    }
+
+    private static int getTintColor() {
+        if (!sPrefsInit) syncPrefCache();
+        return sCachedTintColor;
+    }
+
+    private static float getTintStrength() {
+        if (!sPrefsInit) syncPrefCache();
+        return sCachedTintStrength;
     }
 
     @Override
@@ -715,7 +739,9 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                                     tx + scrollShift * 0.16f, ty,
                                     getRefractionStrength(),
                                     getFrostLevel(),
-                                    isInBlurredContainer(tv)
+                                    isInBlurredContainer(tv),
+                                    getTintColor(),
+                                    getTintStrength()
                             );
                         } catch (Throwable ignored) {}
                     }
@@ -787,7 +813,8 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             LiquidGlassRuntime.drawLiveLiquidBody(
                                     v.getContext(), v, c, left, top, iw - 2f * insetX, ih - 2f * insetY,
                                     loc[0] + left, loc[1] + top, tx, ty,
-                                    getRefractionStrength(), getFrostLevel(), isInBlurredContainer(v));
+                                    getRefractionStrength(), getFrostLevel(), isInBlurredContainer(v),
+                                    getTintColor(), getTintStrength());
                         } catch (Throwable ignored) {}
                     }
 

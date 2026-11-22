@@ -76,6 +76,8 @@ public final class LiquidGlassRuntime {
         "uniform float uStrength;\n" +
         "uniform float uFrost;\n" +
         "uniform float uDrawerMode;\n" +
+        "uniform float3 uTintColor;\n" +
+        "uniform float uTintStrength;\n" +
         "\n" +
         "float squircleSdf(float2 p, float2 b, float n) {\n" +
         "    float2 invB = 1.0 / max(b, float2(1.0));\n" +
@@ -152,6 +154,15 @@ public final class LiquidGlassRuntime {
         "    half3 glassTint = half3(0.985 + 0.015 * diag, 0.992 + 0.008 * diag, 1.0);\n" +
         "    col = mix(col, glassTint, half(bodyAlpha));\n" +
         "\n" +
+        "    // Optional Optical Glass Tint (stained-glass transmission + luminous colored glaze!)\n" +
+        "    if (uTintStrength > 0.005) {\n" +
+        "        half3 tCol = half3(uTintColor);\n" +
+        "        half3 stained = col * clamp(tCol * 1.18 + half3(0.14), half3(0.08), half3(1.18));\n" +
+        "        col = mix(col, stained, half(uTintStrength * 0.65));\n" +
+        "        float tintGlaze = clamp(uTintStrength * (0.30 + 0.18 * edgeMeniscus + 0.08 * topCatch), 0.0, 0.74);\n" +
+        "        col = mix(col, tCol, half(tintGlaze));\n" +
+        "    }\n" +
+        "\n" +
         "    col = clamp(col, half3(0.0), half3(1.0));\n" +
         "    return half4(col * mask, mask);\n" +
         "}\n";
@@ -160,6 +171,8 @@ public final class LiquidGlassRuntime {
     private static final String APPLE_CLEAR_BODY_AGSL =
         "uniform float2 uSize;\n" +
         "uniform float uFrost;\n" +
+        "uniform float3 uTintColor;\n" +
+        "uniform float uTintStrength;\n" +
         "\n" +
         "float squircleSdf(float2 p, float2 b, float n) {\n" +
         "    float2 invB = 1.0 / max(b, float2(1.0));\n" +
@@ -187,8 +200,9 @@ public final class LiquidGlassRuntime {
         "    float edgeMeniscus = exp(-d512 / 16.0);\n" +
         "    float topCatch = pow(clamp((1.0 - pn.y) * 0.5, 0.0, 1.0), 1.15);\n" +
         "    float baseA = mix(0.015, 0.52, uFrost);\n" +
-        "    float outA = clamp(baseA + (0.08 * uFrost) * topCatch + (0.012 + 0.05 * uFrost) * edgeMeniscus, 0.01, 0.62) * mask;\n" +
-        "    return half4(half3(0.99, 0.995, 1.0) * half(outA), half(outA));\n" +
+        "    float outA = clamp(baseA + (0.08 * uFrost) * topCatch + (0.012 + 0.05 * uFrost) * edgeMeniscus + 0.38 * uTintStrength, 0.01, 0.76) * mask;\n" +
+        "    half3 outCol = mix(half3(0.99, 0.995, 1.0), half3(uTintColor), half(clamp(uTintStrength * 1.15, 0.0, 1.0)));\n" +
+        "    return half4(outCol * half(outA), half(outA));\n" +
         "}\n";
 
     // Authentic Apple iOS 26 CORNER-ORIGINATING Specular Fresnel Rim!
@@ -835,7 +849,8 @@ public final class LiquidGlassRuntime {
                                           float left, float top, float width, float height,
                                           float screenX, float screenY,
                                           float tiltX, float tiltY,
-                                          float strength, float frost01, boolean isAppDrawer) {
+                                          float strength, float frost01, boolean isAppDrawer,
+                                          int tintColor, float tintStrength) {
         if (width < 16f || height < 16f || Build.VERSION.SDK_INT < 33) return;
 
         if (sAppCtx == null && ctx != null) {
@@ -844,6 +859,11 @@ public final class LiquidGlassRuntime {
         setFrostLevel(frost01);
         sLastHomeDrawMs = System.currentTimeMillis();
         kickLiveCaptureIfNeeded();
+
+        float tStr = (tintColor != 0) ? Math.max(0f, Math.min(1f, tintStrength)) : 0f;
+        float tR = (tintColor != 0) ? (Color.red(tintColor) / 255f) : 1f;
+        float tG = (tintColor != 0) ? (Color.green(tintColor) / 255f) : 1f;
+        float tB = (tintColor != 0) ? (Color.blue(tintColor) / 255f) : 1f;
 
         boolean useDrawerShader = isAppDrawer && (sDrawerWallShader != null);
         BitmapShader wall = useDrawerShader ? sDrawerWallShader : sHomeWallShader;
@@ -864,6 +884,8 @@ public final class LiquidGlassRuntime {
                 sLensShader.setFloatUniform("uStrength", strength);
                 sLensShader.setFloatUniform("uFrost", frost01);
                 sLensShader.setFloatUniform("uDrawerMode", isAppDrawer ? 1.0f : 0.0f);
+                sLensShader.setFloatUniform("uTintColor", tR, tG, tB);
+                sLensShader.setFloatUniform("uTintStrength", tStr);
                 sLensPaint.setShader(sLensShader);
 
                 canvas.save();
@@ -905,6 +927,8 @@ public final class LiquidGlassRuntime {
                 }
                 sClearShader.setFloatUniform("uSize", width, height);
                 sClearShader.setFloatUniform("uFrost", frost01);
+                sClearShader.setFloatUniform("uTintColor", tR, tG, tB);
+                sClearShader.setFloatUniform("uTintStrength", tStr);
                 sClearPaint.setShader(sClearShader);
 
                 canvas.save();
