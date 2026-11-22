@@ -379,7 +379,7 @@ public class MainActivity extends Activity {
         final String[] levelNames = new String[] { "Subtle", "iOS 26", "Liquid Syrup" };
         final Button[] levelBtns = new Button[3];
         final Runnable styleLevels = () -> {
-            int cur = prefs.getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 2);
+            int cur = prefs.getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 1);
             for (int k = 0; k < 3; k++) {
                 boolean sel = (k == cur);
                 levelBtns[k].setBackground(sel

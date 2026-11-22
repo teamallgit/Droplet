@@ -95,10 +95,10 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     }
 
     private static float getRefractionStrength() {
-        int lvl = prefs().getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 2); // Default: Liquid Syrup (2)!
+        int lvl = prefs().getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 1); // Default: iOS 26 Balanced (authentic Apple!)
         if (lvl == 0) return 0.65f;      // Subtle
-        if (lvl == 1) return 1.00f;      // iOS 26 Balanced
-        return 1.38f;                    // Liquid Syrup (viscous thick droplet lens!)
+        if (lvl == 1) return 1.00f;      // iOS 26 Authentic
+        return 1.45f;                    // Liquid Syrup (Strong Refraction)
     }
 
     @Override
@@ -463,7 +463,9 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         if (param.thisObject instanceof View) {
-                            synchronized (sActiveIcons) { sActiveIcons.remove((View) param.thisObject); }
+                            View v = (View) param.thisObject;
+                            synchronized (sActiveIcons) { sActiveIcons.remove(v); }
+                            LiquidGlassRuntime.detachBlurForView(v);
                         }
                     }
                 });

@@ -36,7 +36,7 @@ public final class ModuleStatus {
     }
 
     public static String getModuleVersion() {
-        return "2.1.2";
+        return "2.2.0";
     }
 
     public static int getOneUiVersionInt() {
