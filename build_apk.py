@@ -140,10 +140,27 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.oneliquid.iconpack"
-    android:versionCode="1"
-    android:versionName="1.0.0">
+    android:versionCode="2"
+    android:versionName="1.0.1">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+
+    <queries>
+        <package android:name="com.samsung.android.themedesigner" />
+        <package android:name="com.samsung.android.goodlock" />
+        <package android:name="com.teslacoilsw.launcher" />
+        <package android:name="app.lawnchair" />
+        <package android:name="ch.deletescape.lawnchair.plah" />
+        <package android:name="ginlemon.flowerfree" />
+        <package android:name="ginlemon.flowerpro" />
+        <package android:name="com.actionlauncher.playstore" />
+        <package android:name="com.anddoes.launcher" />
+        <package android:name="org.adw.launcher" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
 
     <application
         android:label="OneLiquid"
@@ -222,10 +239,14 @@ def generate_main_activity_java(all_drawables):
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
@@ -243,6 +264,54 @@ public class MainActivity extends Activity {{
         return Math.round(v * getResources().getDisplayMetrics().density);
     }}
 
+    private String getDefaultLauncherPackage() {{
+        Intent home = new Intent(Intent.ACTION_MAIN);
+        home.addCategory(Intent.CATEGORY_HOME);
+        ResolveInfo ri = getPackageManager().resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY);
+        return (ri != null && ri.activityInfo != null) ? ri.activityInfo.packageName : "";
+    }}
+
+    private boolean tryDirectApply(String launcherPkg) {{
+        try {{
+            String pkg = getPackageName();
+            if ("com.teslacoilsw.launcher".equals(launcherPkg)) {{
+                Intent i = new Intent("com.teslacoilsw.launcher.APPLY_ICON_THEME");
+                i.setPackage("com.teslacoilsw.launcher");
+                i.putExtra("com.teslacoilsw.launcher.extra.ICON_THEME_TYPE", "GO");
+                i.putExtra("com.teslacoilsw.launcher.extra.ICON_THEME_PACKAGE", pkg);
+                startActivity(i);
+                return true;
+            }}
+            if (launcherPkg.startsWith("ginlemon.flower")) {{
+                Intent i = new Intent("ginlemon.smartlauncher.setGSLTHEME");
+                i.putExtra("package", pkg);
+                startActivity(i);
+                return true;
+            }}
+            if ("com.anddoes.launcher".equals(launcherPkg)) {{
+                Intent i = new Intent("com.anddoes.launcher.SET_THEME");
+                i.putExtra("com.anddoes.launcher.THEME_PACKAGE_NAME", pkg);
+                startActivity(i);
+                return true;
+            }}
+            if ("com.actionlauncher.playstore".equals(launcherPkg)) {{
+                Intent i = getPackageManager().getLaunchIntentForPackage(launcherPkg);
+                if (i != null) {{
+                    i.putExtra("apply_icon_pack", pkg);
+                    startActivity(i);
+                    return true;
+                }}
+            }}
+            if ("org.adw.launcher".equals(launcherPkg)) {{
+                Intent i = new Intent("org.adw.launcher.SET_THEME");
+                i.putExtra("org.adw.launcher.theme.NAME", pkg);
+                startActivity(i);
+                return true;
+            }}
+        }} catch (Throwable ignored) {{}}
+        return false;
+    }}
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {{
         super.onCreate(savedInstanceState);
@@ -252,39 +321,88 @@ public class MainActivity extends Activity {{
         root.setBackgroundColor(Color.parseColor("#182230"));
         root.setPadding(dp(18), dp(48), dp(18), dp(18));
 
+        // Header row: OneLiquid Liquid Glass logo right next to the title
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        ImageView logo = new ImageView(this);
+        int logoRes = getResources().getIdentifier("ic_oneliquid_launcher", "drawable", getPackageName());
+        if (logoRes != 0) logo.setImageResource(logoRes);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(54), dp(54));
+        logoLp.rightMargin = dp(14);
+        header.addView(logo, logoLp);
+
+        LinearLayout titleCol = new LinearLayout(this);
+        titleCol.setOrientation(LinearLayout.VERTICAL);
+
         TextView title = new TextView(this);
         title.setText("OneLiquid");
         title.setTextColor(Color.WHITE);
         title.setTextSize(28);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        root.addView(title);
+        titleCol.addView(title);
+
+        TextView badge = new TextView(this);
+        badge.setText(ICONS.length + " Liquid Glass Icons • One UI");
+        badge.setTextColor(Color.parseColor("#9EB4CE"));
+        badge.setTextSize(12.5f);
+        titleCol.addView(badge);
+
+        header.addView(titleCol);
+        LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        headerLp.bottomMargin = dp(10);
+        root.addView(header, headerLp);
+
+        String launcherPkg = getDefaultLauncherPackage();
+        boolean supportsDirect = "com.teslacoilsw.launcher".equals(launcherPkg)
+                || launcherPkg.startsWith("ginlemon.flower")
+                || "com.anddoes.launcher".equals(launcherPkg)
+                || "com.actionlauncher.playstore".equals(launcherPkg)
+                || "org.adw.launcher".equals(launcherPkg);
 
         TextView sub = new TextView(this);
-        sub.setText(ICONS.length + " Liquid Glass icons for One UI\\nApply via Good Lock -> Theme Park -> Icon -> Create New -> Iconpack -> Third Party -> OneLiquid (keep Shape original & Effects None).");
+        if (supportsDirect) {{
+            sub.setText("Tap below to apply OneLiquid directly to your launcher, or use Good Lock -> Theme Park on One UI Home.");
+        }} else {{
+            sub.setText("One UI Home requires Samsung Theme Park to apply icon packs (no root/ADB).\\nTheme Park -> Icon -> Create New -> Iconpack -> Third Party -> OneLiquid (keep Shape original & Effects None).");
+        }}
         sub.setTextColor(Color.parseColor("#C8D6E8"));
-        sub.setTextSize(13);
-        sub.setPadding(0, dp(6), 0, dp(14));
+        sub.setTextSize(12.5f);
+        sub.setPadding(0, dp(2), 0, dp(14));
         root.addView(sub);
 
         Button btn = new Button(this);
-        btn.setText("Open Theme Park");
+        btn.setText(supportsDirect ? "Apply OneLiquid Now" : "Apply via Theme Park");
         btn.setTextColor(Color.WHITE);
         btn.setAllCaps(false);
+        btn.setTextSize(15);
+        btn.setTypeface(Typeface.DEFAULT_BOLD);
         GradientDrawable btnBg = new GradientDrawable();
         btnBg.setColor(Color.parseColor("#33FFFFFF"));
         btnBg.setCornerRadius(dp(16));
         btnBg.setStroke(dp(1), Color.parseColor("#88FFFFFF"));
         btn.setBackground(btnBg);
         btn.setOnClickListener(v -> {{
-            Intent i = getPackageManager().getLaunchIntentForPackage("com.samsung.android.themedesigner");
-            if (i != null) {{
-                startActivity(i);
+            if (supportsDirect && tryDirectApply(launcherPkg)) {{
+                return;
+            }}
+            Intent tp = getPackageManager().getLaunchIntentForPackage("com.samsung.android.themedesigner");
+            if (tp != null) {{
+                startActivity(tp);
             }} else {{
-                Toast.makeText(this, "Open Good Lock -> Theme Park -> Icon", Toast.LENGTH_LONG).show();
+                try {{
+                    startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("samsungapps://ProductDetail/com.samsung.android.themedesigner")));
+                }} catch (Throwable t) {{
+                    Toast.makeText(this, "Install Good Lock -> Theme Park from Galaxy Store", Toast.LENGTH_LONG).show();
+                }}
             }}
         }});
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
         btnLp.bottomMargin = dp(16);
         root.addView(btn, btnLp);
 
