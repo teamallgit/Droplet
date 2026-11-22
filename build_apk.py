@@ -5,6 +5,7 @@ import xml.sax.saxutils as saxutils
 
 BASE_DIR = "."
 ICONS_DIR = os.path.join(BASE_DIR, "icons")
+ANDROID_SRC_DIR = os.path.join(BASE_DIR, "android_src")
 APK_PROJ = os.path.join(BASE_DIR, "apk_build")
 OUT_APK = os.path.join(BASE_DIR, "OneLiquid.apk")
 
@@ -62,7 +63,7 @@ def generate_appfilter_xml(rows, extra_rows=None):
         '    <!-- OneLiquid itself -->',
         '    <item component="ComponentInfo{com.oneliquid.iconpack/com.oneliquid.iconpack.MainActivity}" drawable="ic_oneliquid_launcher" />',
         '',
-        '    <!-- Installed launchable apps -->',
+        '    <!-- Core installed & One UI apps -->',
     ]
 
     seen_components = {
@@ -163,16 +164,29 @@ def generate_icon_pack_xml(all_drawables):
     return "\n".join(lines) + "\n"
 
 
+def generate_xposed_scope_xml():
+    return """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope" translatable="false">
+        <item>com.sec.android.app.launcher</item>
+        <item>com.android.systemui</item>
+    </string-array>
+</resources>
+"""
+
+
 def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.oneliquid.iconpack"
-    android:versionCode="4"
-    android:versionName="1.2.0">
+    android:versionCode="5"
+    android:versionName="2.0.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 
     <queries>
+        <package android:name="com.sec.android.app.launcher" />
+        <package android:name="com.android.systemui" />
         <package android:name="com.samsung.android.themedesigner" />
         <package android:name="com.samsung.android.goodlock" />
         <package android:name="com.teslacoilsw.launcher" />
@@ -193,6 +207,13 @@ def generate_manifest():
         android:label="OneLiquid"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false">
+
+        <!-- LSPosed / Xposed Module Metadata (One UI 8 / 8.5 / 9+) -->
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="1:1 iOS 26 Clear Liquid Glass icons, live SemBlurInfo backdrop blur, AGSL Fresnel refraction, dock &amp; folder glass for One UI 8 / 8.5 / 9+" />
+        <meta-data android:name="xposedminversion" android:value="93" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
+        <meta-data android:name="xposedsharedprefs" android:value="true" />
 
         <activity
             android:name=".MainActivity"
@@ -260,248 +281,6 @@ def generate_manifest():
 """
 
 
-def generate_main_activity_java(all_drawables):
-    arr_items = ", ".join(f'"{d}"' for d in all_drawables)
-    return f"""package com.oneliquid.iconpack;
-
-import android.app.Activity;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
-import android.os.Bundle;
-import android.view.Gravity;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.GridView;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import android.widget.Toast;
-import android.text.Editable;
-import android.text.TextWatcher;
-import java.util.ArrayList;
-import java.util.List;
-
-public class MainActivity extends Activity {{
-    private static final String[] ICONS = new String[] {{ {arr_items} }};
-    private final List<String> filtered = new ArrayList<>();
-
-    private int dp(int v) {{
-        return Math.round(v * getResources().getDisplayMetrics().density);
-    }}
-
-    private String getDefaultLauncherPackage() {{
-        Intent home = new Intent(Intent.ACTION_MAIN);
-        home.addCategory(Intent.CATEGORY_HOME);
-        ResolveInfo ri = getPackageManager().resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY);
-        return (ri != null && ri.activityInfo != null) ? ri.activityInfo.packageName : "";
-    }}
-
-    private boolean tryDirectApply(String launcherPkg) {{
-        try {{
-            String pkg = getPackageName();
-            if ("com.teslacoilsw.launcher".equals(launcherPkg)) {{
-                Intent i = new Intent("com.teslacoilsw.launcher.APPLY_ICON_THEME");
-                i.setPackage("com.teslacoilsw.launcher");
-                i.putExtra("com.teslacoilsw.launcher.extra.ICON_THEME_TYPE", "GO");
-                i.putExtra("com.teslacoilsw.launcher.extra.ICON_THEME_PACKAGE", pkg);
-                startActivity(i);
-                return true;
-            }}
-            if (launcherPkg.startsWith("ginlemon.flower")) {{
-                Intent i = new Intent("ginlemon.smartlauncher.setGSLTHEME");
-                i.putExtra("package", pkg);
-                startActivity(i);
-                return true;
-            }}
-            if ("com.anddoes.launcher".equals(launcherPkg)) {{
-                Intent i = new Intent("com.anddoes.launcher.SET_THEME");
-                i.putExtra("com.anddoes.launcher.THEME_PACKAGE_NAME", pkg);
-                startActivity(i);
-                return true;
-            }}
-            if ("com.actionlauncher.playstore".equals(launcherPkg)) {{
-                Intent i = getPackageManager().getLaunchIntentForPackage(launcherPkg);
-                if (i != null) {{
-                    i.putExtra("apply_icon_pack", pkg);
-                    startActivity(i);
-                    return true;
-                }}
-            }}
-            if ("org.adw.launcher".equals(launcherPkg)) {{
-                Intent i = new Intent("org.adw.launcher.SET_THEME");
-                i.putExtra("org.adw.launcher.theme.NAME", pkg);
-                startActivity(i);
-                return true;
-            }}
-        }} catch (Throwable ignored) {{}}
-        return false;
-    }}
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {{
-        super.onCreate(savedInstanceState);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#182230"));
-        root.setPadding(dp(18), dp(48), dp(18), dp(18));
-
-        // Header row: OneLiquid Liquid Glass logo right next to the title
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-
-        ImageView logo = new ImageView(this);
-        int logoRes = getResources().getIdentifier("ic_oneliquid_launcher", "drawable", getPackageName());
-        if (logoRes != 0) logo.setImageResource(logoRes);
-        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(54), dp(54));
-        logoLp.rightMargin = dp(14);
-        header.addView(logo, logoLp);
-
-        LinearLayout titleCol = new LinearLayout(this);
-        titleCol.setOrientation(LinearLayout.VERTICAL);
-
-        TextView title = new TextView(this);
-        title.setText("OneLiquid");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(28);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        titleCol.addView(title);
-
-        TextView badge = new TextView(this);
-        badge.setText(ICONS.length + " Liquid Glass Icons • One UI");
-        badge.setTextColor(Color.parseColor("#9EB4CE"));
-        badge.setTextSize(12.5f);
-        titleCol.addView(badge);
-
-        header.addView(titleCol);
-        LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        headerLp.bottomMargin = dp(10);
-        root.addView(header, headerLp);
-
-        String launcherPkg = getDefaultLauncherPackage();
-        boolean supportsDirect = "com.teslacoilsw.launcher".equals(launcherPkg)
-                || launcherPkg.startsWith("ginlemon.flower")
-                || "com.anddoes.launcher".equals(launcherPkg)
-                || "com.actionlauncher.playstore".equals(launcherPkg)
-                || "org.adw.launcher".equals(launcherPkg);
-
-        TextView sub = new TextView(this);
-        if (supportsDirect) {{
-            sub.setText("Tap below to apply OneLiquid directly to your launcher, or use Good Lock -> Theme Park on One UI Home.");
-        }} else {{
-            sub.setText("One UI Home requires Samsung Theme Park to apply icon packs (no root/ADB).\\nTheme Park -> Icon -> Create New -> Iconpack -> Third Party -> OneLiquid (keep Shape original & Effects None).");
-        }}
-        sub.setTextColor(Color.parseColor("#C8D6E8"));
-        sub.setTextSize(12.5f);
-        sub.setPadding(0, dp(2), 0, dp(14));
-        root.addView(sub);
-
-        Button btn = new Button(this);
-        btn.setText(supportsDirect ? "Apply OneLiquid Now" : "Apply via Theme Park");
-        btn.setTextColor(Color.WHITE);
-        btn.setAllCaps(false);
-        btn.setTextSize(15);
-        btn.setTypeface(Typeface.DEFAULT_BOLD);
-        GradientDrawable btnBg = new GradientDrawable();
-        btnBg.setColor(Color.parseColor("#33FFFFFF"));
-        btnBg.setCornerRadius(dp(16));
-        btnBg.setStroke(dp(1), Color.parseColor("#88FFFFFF"));
-        btn.setBackground(btnBg);
-        btn.setOnClickListener(v -> {{
-            if (supportsDirect && tryDirectApply(launcherPkg)) {{
-                return;
-            }}
-            Intent tp = getPackageManager().getLaunchIntentForPackage("com.samsung.android.themedesigner");
-            if (tp != null) {{
-                startActivity(tp);
-            }} else {{
-                try {{
-                    startActivity(new Intent(Intent.ACTION_VIEW,
-                            Uri.parse("samsungapps://ProductDetail/com.samsung.android.themedesigner")));
-                }} catch (Throwable t) {{
-                    Toast.makeText(this, "Install Good Lock -> Theme Park from Galaxy Store", Toast.LENGTH_LONG).show();
-                }}
-            }}
-        }});
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-        btnLp.bottomMargin = dp(12);
-        root.addView(btn, btnLp);
-
-        for (String ic : ICONS) filtered.add(ic);
-
-        EditText search = new EditText(this);
-        search.setHint("Search " + ICONS.length + " icons (e.g. netflix, spotify, paypal)...");
-        search.setHintTextColor(Color.parseColor("#8FA4BE"));
-        search.setTextColor(Color.WHITE);
-        search.setTextSize(13.5f);
-        search.setSingleLine(true);
-        search.setPadding(dp(14), dp(10), dp(14), dp(10));
-        GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setColor(Color.parseColor("#1FFFFFFF"));
-        searchBg.setCornerRadius(dp(14));
-        searchBg.setStroke(dp(1), Color.parseColor("#44FFFFFF"));
-        search.setBackground(searchBg);
-        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        searchLp.bottomMargin = dp(14);
-        root.addView(search, searchLp);
-
-        GridView grid = new GridView(this);
-        grid.setNumColumns(4);
-        grid.setHorizontalSpacing(dp(12));
-        grid.setVerticalSpacing(dp(14));
-        BaseAdapter adapter = new BaseAdapter() {{
-            @Override public int getCount() {{ return filtered.size(); }}
-            @Override public Object getItem(int pos) {{ return filtered.get(pos); }}
-            @Override public long getItemId(int pos) {{ return pos; }}
-            @Override
-            public View getView(int pos, View convertView, ViewGroup parent) {{
-                ImageView iv = (convertView instanceof ImageView)
-                        ? (ImageView) convertView : new ImageView(MainActivity.this);
-                int sz = dp(72);
-                iv.setLayoutParams(new GridView.LayoutParams(sz, sz));
-                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                int resId = getResources().getIdentifier(filtered.get(pos), "drawable", getPackageName());
-                if (resId != 0) iv.setImageResource(resId);
-                return iv;
-            }}
-        }};
-        grid.setAdapter(adapter);
-
-        search.addTextChangedListener(new TextWatcher() {{
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {{}}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {{
-                String q = s.toString().trim().toLowerCase().replace(" ", "_");
-                filtered.clear();
-                for (String ic : ICONS) {{
-                    if (q.isEmpty() || ic.toLowerCase().contains(q)) filtered.add(ic);
-                }}
-                adapter.notifyDataSetChanged();
-            }}
-            @Override public void afterTextChanged(Editable s) {{}}
-        }});
-
-        root.addView(grid, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f));
-
-        setContentView(root);
-    }}
-}}
-"""
-
-
 def run(cmd, env=None):
     res = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if res.returncode != 0:
@@ -510,6 +289,15 @@ def run(cmd, env=None):
         print("STDERR:", res.stderr)
         raise RuntimeError(f"Command failed with exit code {res.returncode}")
     return res.stdout
+
+
+def collect_java_files(directory):
+    out = []
+    for r, _, files in os.walk(directory):
+        for fn in sorted(files):
+            if fn.endswith(".java"):
+                out.append(os.path.join(r, fn))
+    return out
 
 
 def main():
@@ -524,10 +312,9 @@ def main():
     xml_dir = os.path.join(res_dir, "xml")
     values_dir = os.path.join(res_dir, "values")
     assets_dir = os.path.join(APK_PROJ, "assets")
-    src_dir = os.path.join(APK_PROJ, "src", "com", "oneliquid", "iconpack")
     build_dir = os.path.join(APK_PROJ, "build")
 
-    for d in (drawable_dir, mipmap_dir, xml_dir, values_dir, assets_dir, src_dir, build_dir):
+    for d in (drawable_dir, mipmap_dir, xml_dir, values_dir, assets_dir, build_dir):
         os.makedirs(d, exist_ok=True)
 
     all_drawables = []
@@ -539,9 +326,7 @@ def main():
         if stem not in ("ic_glass_back", "ic_glass_mask", "ic_glass_upon"):
             all_drawables.append(stem)
 
-    # Use our custom OneLiquid ('OneUI' text in Liquid Glass) icon as the app's launcher icon!
-    launcher_src = os.path.join(ICONS_DIR, "ic_oneliquid_launcher.png")
-    shutil.copy2(launcher_src, os.path.join(mipmap_dir, "ic_launcher.png"))
+    shutil.copy2(os.path.join(ICONS_DIR, "ic_oneliquid_launcher.png"), os.path.join(mipmap_dir, "ic_launcher.png"))
 
     appfilter_xml = generate_appfilter_xml(rows, extra_rows)
     drawable_xml = generate_drawable_xml(rows, extra_rows)
@@ -555,15 +340,18 @@ def main():
 
     with open(os.path.join(values_dir, "icon_pack.xml"), "w", encoding="utf-8") as f:
         f.write(icon_pack_xml)
+    with open(os.path.join(values_dir, "xposed_scope.xml"), "w", encoding="utf-8") as f:
+        f.write(generate_xposed_scope_xml())
+
+    # Xposed / LSPosed module entry point
+    with open(os.path.join(assets_dir, "xposed_init"), "w", encoding="utf-8") as f:
+        f.write("com.oneliquid.iconpack.xposed.OneLiquidHook\n")
 
     manifest_path = os.path.join(APK_PROJ, "AndroidManifest.xml")
     with open(manifest_path, "w", encoding="utf-8") as f:
         f.write(generate_manifest())
 
-    java_path = os.path.join(src_dir, "MainActivity.java")
-    with open(java_path, "w", encoding="utf-8") as f:
-        f.write(generate_main_activity_java(all_drawables))
-
+    # Compile Android resources
     compiled_zip = os.path.join(build_dir, "res_compiled.zip")
     run([os.path.join(BUILD_TOOLS, "aapt2"), "compile", "--dir", res_dir, "-o", compiled_zip])
 
@@ -581,27 +369,44 @@ def main():
         compiled_zip,
     ])
 
-    classes_dir = os.path.join(build_dir, "classes")
-    os.makedirs(classes_dir, exist_ok=True)
     env = os.environ.copy()
     env["JAVA_HOME"] = JAVA_HOME
+
+    # 1. Compile compile-only Xposed API stubs (NEVER packaged into classes.dex!)
+    stub_classes = os.path.join(build_dir, "xposed_stub_classes")
+    os.makedirs(stub_classes, exist_ok=True)
+    stub_javas = collect_java_files(os.path.join(ANDROID_SRC_DIR, "xposed_stub"))
     run([
         os.path.join(JAVA_HOME, "bin", "javac"),
         "-cp", ANDROID_JAR,
-        "-d", classes_dir,
-        java_path,
+        "-d", stub_classes,
+        *stub_javas,
     ], env=env)
 
+    # 2. Compile OneLiquid app + LSPosed module classes against ANDROID_JAR + stub_classes
+    app_classes = os.path.join(build_dir, "app_classes")
+    os.makedirs(app_classes, exist_ok=True)
+    app_javas = collect_java_files(os.path.join(ANDROID_SRC_DIR, "app"))
+    run([
+        os.path.join(JAVA_HOME, "bin", "javac"),
+        "-cp", f"{ANDROID_JAR}:{stub_classes}",
+        "-d", app_classes,
+        *app_javas,
+    ], env=env)
+
+    # 3. DEX ONLY OneLiquid's own classes (LSPosed supplies de.robv.android.xposed.* at runtime!)
     class_files = []
-    for root_d, _, files in os.walk(classes_dir):
+    for root_d, _, files in os.walk(app_classes):
         for fn in files:
             if fn.endswith(".class"):
                 class_files.append(os.path.join(root_d, fn))
 
     run([
         os.path.join(BUILD_TOOLS, "d8"),
+        "--min-api", "26",
         "--output", build_dir,
         "--lib", ANDROID_JAR,
+        "--classpath", stub_classes,
         *class_files,
     ], env=env)
 
@@ -621,7 +426,7 @@ def main():
 
     run([os.path.join(BUILD_TOOLS, "apksigner"), "verify", OUT_APK], env=env)
     size_mb = os.path.getsize(OUT_APK) / (1024 * 1024)
-    print(f"SUCCESS! Built & signed {OUT_APK} ({size_mb:.2f} MB, {len(all_drawables)} icons)")
+    print(f"SUCCESS! Built & signed {OUT_APK} ({size_mb:.2f} MB, {len(all_drawables)} icons, LSPosed Module + Icon Pack)")
 
 
 if __name__ == "__main__":
