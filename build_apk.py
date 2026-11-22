@@ -105,9 +105,9 @@ def generate_appfilter_xml(rows, extra_rows=None):
 
     if extra_rows:
         lines.append('')
-        lines.append('    <!-- Mainstream & Niche Apps (1,000+ Liquid Glass Collection) -->')
+        lines.append('    <!-- Mainstream & Niche Apps (1,000+ Solid-Filled Liquid Glass Collection) -->')
         for res_name, comp, lbl in extra_rows:
-            if comp not in seen_components and os.path.exists(os.path.join(ICONS_DIR, f"{res_name}.png")):
+            if comp and comp.startswith("ComponentInfo{") and comp not in seen_components and os.path.exists(os.path.join(ICONS_DIR, f"{res_name}.png")):
                 seen_components.add(comp)
                 lines.append(f'    <item component={saxutils.quoteattr(comp)} drawable={saxutils.quoteattr(res_name)} />')
 
@@ -167,8 +167,8 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.oneliquid.iconpack"
-    android:versionCode="3"
-    android:versionName="1.1.0">
+    android:versionCode="4"
+    android:versionName="1.2.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 
