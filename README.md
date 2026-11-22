@@ -15,7 +15,7 @@
 
 - **1:1 iOS 26 Clear Liquid Glass Aesthetic** — Calibrated against Apple's official iOS 26 Clear Home Screen: pure-white top-to-bottom translucent frosted glyphs, crystal-clear glass body so your wallpaper shines through, and razor-crisp anisotropic Fresnel specular rim catchlights (top-left `-135°` & bottom-right `+45°`).
 - **Continuous Squircle Geometry** — Supersampled (`512×512` → `256×256`) smooth continuous squircle (`n = 4.50`) with exact Euclidean SDF normals.
-- **Stock-Accurate Brand Vectors & Optical Weight Balancing** — Combines exact official brand SVGs (Chrome, YouTube, Spotify, Steam, Google Play, Google Drive, App Store, Snapchat, Roblox, Bose, Sonos, eBay, McDonald's), bespoke iOS 26 Clear system icons, and optically scaled monochrome/adaptive icons with unified visual weight across dense squares, circles, sparse glyphs, and wide wordmarks.
+- **1,020+ Liquid Glass Icons** — Full coverage of mainstream & niche Android apps (mapped across thousands of `ComponentInfo` activities in `appfilter.xml`), combining exact official brand SVGs (Chrome, YouTube, Spotify, Steam, Google Play, Google Drive, App Store, Snapchat, Roblox, Bose, Sonos, eBay, McDonald's), bespoke iOS 26 Clear system icons, and 900+ mainstream & niche vectors sourced from [Lawnicons](https://github.com/LawnchairLauncher/lawnicons) + [Simple Icons](https://simpleicons.org/).
 - **Universal Launcher Fallback** — Includes `iconback`, `iconmask`, and `iconupon` Liquid Glass framing so unthemed apps still blend in.
 
 ## Icon Preview

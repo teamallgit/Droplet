@@ -24,7 +24,19 @@ def load_mapping():
     return rows
 
 
-def generate_appfilter_xml(rows):
+def load_extra_mapping():
+    extra_path = os.path.join(BASE_DIR, "extra_mapping.tsv")
+    rows = []
+    if os.path.exists(extra_path):
+        with open(extra_path, "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 3:
+                    rows.append((parts[0], parts[1], parts[2]))
+    return rows
+
+
+def generate_appfilter_xml(rows, extra_rows=None):
     lines = [
         '<?xml version="1.0" encoding="utf-8"?>',
         '<resources>',
@@ -91,11 +103,19 @@ def generate_appfilter_xml(rows):
             seen_components.add(comp)
             lines.append(f'    <item component={saxutils.quoteattr(comp)} drawable={saxutils.quoteattr(dname)} />')
 
+    if extra_rows:
+        lines.append('')
+        lines.append('    <!-- Mainstream & Niche Apps (1,000+ Liquid Glass Collection) -->')
+        for res_name, comp, lbl in extra_rows:
+            if comp not in seen_components and os.path.exists(os.path.join(ICONS_DIR, f"{res_name}.png")):
+                seen_components.add(comp)
+                lines.append(f'    <item component={saxutils.quoteattr(comp)} drawable={saxutils.quoteattr(res_name)} />')
+
     lines.append('</resources>')
     return "\n".join(lines) + "\n"
 
 
-def generate_drawable_xml(rows):
+def generate_drawable_xml(rows, extra_rows=None):
     lines = [
         '<?xml version="1.0" encoding="utf-8"?>',
         '<resources>',
@@ -119,6 +139,13 @@ def generate_drawable_xml(rows):
             seen.add(res_name)
             lines.append(f'    <item drawable={saxutils.quoteattr(res_name)} />')
 
+    if extra_rows:
+        lines.append('    <category title="Mainstream &amp; Niche (1,000+)" />')
+        for res_name, comp, lbl in extra_rows:
+            if res_name not in seen and os.path.exists(os.path.join(ICONS_DIR, f"{res_name}.png")):
+                seen.add(res_name)
+                lines.append(f'    <item drawable={saxutils.quoteattr(res_name)} />')
+
     lines.append('</resources>')
     return "\n".join(lines) + "\n"
 
@@ -140,8 +167,8 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.oneliquid.iconpack"
-    android:versionCode="2"
-    android:versionName="1.0.1">
+    android:versionCode="3"
+    android:versionName="1.1.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 
@@ -251,14 +278,20 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.Editable;
+import android.text.TextWatcher;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {{
     private static final String[] ICONS = new String[] {{ {arr_items} }};
+    private final List<String> filtered = new ArrayList<>();
 
     private int dp(int v) {{
         return Math.round(v * getResources().getDisplayMetrics().density);
@@ -403,16 +436,35 @@ public class MainActivity extends Activity {{
         }});
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-        btnLp.bottomMargin = dp(16);
+        btnLp.bottomMargin = dp(12);
         root.addView(btn, btnLp);
+
+        for (String ic : ICONS) filtered.add(ic);
+
+        EditText search = new EditText(this);
+        search.setHint("Search " + ICONS.length + " icons (e.g. netflix, spotify, paypal)...");
+        search.setHintTextColor(Color.parseColor("#8FA4BE"));
+        search.setTextColor(Color.WHITE);
+        search.setTextSize(13.5f);
+        search.setSingleLine(true);
+        search.setPadding(dp(14), dp(10), dp(14), dp(10));
+        GradientDrawable searchBg = new GradientDrawable();
+        searchBg.setColor(Color.parseColor("#1FFFFFFF"));
+        searchBg.setCornerRadius(dp(14));
+        searchBg.setStroke(dp(1), Color.parseColor("#44FFFFFF"));
+        search.setBackground(searchBg);
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        searchLp.bottomMargin = dp(14);
+        root.addView(search, searchLp);
 
         GridView grid = new GridView(this);
         grid.setNumColumns(4);
         grid.setHorizontalSpacing(dp(12));
         grid.setVerticalSpacing(dp(14));
-        grid.setAdapter(new BaseAdapter() {{
-            @Override public int getCount() {{ return ICONS.length; }}
-            @Override public Object getItem(int pos) {{ return ICONS[pos]; }}
+        BaseAdapter adapter = new BaseAdapter() {{
+            @Override public int getCount() {{ return filtered.size(); }}
+            @Override public Object getItem(int pos) {{ return filtered.get(pos); }}
             @Override public long getItemId(int pos) {{ return pos; }}
             @Override
             public View getView(int pos, View convertView, ViewGroup parent) {{
@@ -421,11 +473,26 @@ public class MainActivity extends Activity {{
                 int sz = dp(72);
                 iv.setLayoutParams(new GridView.LayoutParams(sz, sz));
                 iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                int resId = getResources().getIdentifier(ICONS[pos], "drawable", getPackageName());
+                int resId = getResources().getIdentifier(filtered.get(pos), "drawable", getPackageName());
                 if (resId != 0) iv.setImageResource(resId);
                 return iv;
             }}
+        }};
+        grid.setAdapter(adapter);
+
+        search.addTextChangedListener(new TextWatcher() {{
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {{}}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {{
+                String q = s.toString().trim().toLowerCase().replace(" ", "_");
+                filtered.clear();
+                for (String ic : ICONS) {{
+                    if (q.isEmpty() || ic.toLowerCase().contains(q)) filtered.add(ic);
+                }}
+                adapter.notifyDataSetChanged();
+            }}
+            @Override public void afterTextChanged(Editable s) {{}}
         }});
+
         root.addView(grid, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f));
 
@@ -447,6 +514,7 @@ def run(cmd, env=None):
 
 def main():
     rows = load_mapping()
+    extra_rows = load_extra_mapping()
     if os.path.exists(APK_PROJ):
         shutil.rmtree(APK_PROJ)
 
@@ -475,8 +543,8 @@ def main():
     launcher_src = os.path.join(ICONS_DIR, "ic_oneliquid_launcher.png")
     shutil.copy2(launcher_src, os.path.join(mipmap_dir, "ic_launcher.png"))
 
-    appfilter_xml = generate_appfilter_xml(rows)
-    drawable_xml = generate_drawable_xml(rows)
+    appfilter_xml = generate_appfilter_xml(rows, extra_rows)
+    drawable_xml = generate_drawable_xml(rows, extra_rows)
     icon_pack_xml = generate_icon_pack_xml(all_drawables)
 
     for target_dir in (xml_dir, assets_dir):
