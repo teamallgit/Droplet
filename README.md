@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/oneliquid_logo.png" width="160" alt="OneLiquid Logo" />
+  <img src="assets/oneliquid_banner.png" width="760" alt="OneLiquid Banner" />
 </p>
 
 <h1 align="center">OneLiquid</h1>
