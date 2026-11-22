@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.keystore
+apk_build/
+extracted_icons/
+ref_analysis/
+*.apk
+.DS_Store

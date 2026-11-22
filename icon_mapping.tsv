@@ -1,0 +1,110 @@
+ios_chrome	com.android.chrome	com.google.android.apps.chrome.Main	Chrome Beta	official_brand
+ios_settings	com.android.settings	com.android.settings.Settings	Settings	bespoke_ios
+ios_playstore	com.android.vending	com.android.vending.AssetBrowserActivity	Play Store	official_brand
+ios_maps	com.google.android.apps.maps	com.google.android.maps.MapsActivity	Maps	bespoke_ios
+ios_google_messages	com.google.android.apps.messaging	com.google.android.apps.messaging.ui.ConversationListActivity	Messages	bespoke_ios
+ios_facetime	com.google.android.apps.tachyon	com.google.android.apps.tachyon.MainActivity	Meet	bespoke_ios
+ios_mail	com.google.android.gm	com.google.android.gm.ConversationListActivityGmail	Gmail	bespoke_ios
+ios_youtube	com.google.android.youtube	com.google.android.youtube.app.honeycomb.Shell$HomeActivity	YouTube	official_brand
+ios_contacts	com.samsung.android.app.contacts	com.samsung.android.contacts.contactslist.PeopleActivity	Contacts	bespoke_ios
+ic_com_samsung_android_app_sketchbook	com.samsung.android.app.sketchbook	com.samsung.android.app.sketchbook.application.DrawingActivity	Creative studio	mono_glass
+ic_com_samsung_android_bixby_agent	com.samsung.android.bixby.agent	com.samsung.android.bixby.assistanthome.AssistantHomeLauncherActivity	Bixby	mono_glass
+ios_phone	com.samsung.android.dialer	com.samsung.android.dialer.DialtactsActivity	Phone	bespoke_ios
+ios_messages	com.samsung.android.messaging	com.android.mms.ui.ConversationComposer	Messages	bespoke_ios
+ic_com_samsung_knox_securefolder	com.samsung.knox.securefolder	com.samsung.knox.securefolder.presentation.switcher.view.SecureFolderShortcutActivity	Secure Folder	mono_glass
+ios_camera	com.sec.android.app.camera	com.sec.android.app.camera.Camera	Camera	bespoke_ios
+ios_photos	com.sec.android.gallery3d	com.samsung.android.gallery.app.activity.GalleryActivity	Gallery	bespoke_ios
+ic_cn_nanoturtle_rootmys9280	cn.nanoturtle.rootmys9280	cn.nanoturtle.rootmys9280.manager.ui.MainActivity	RootMyS24	fg_tonal
+ios_drive	com.google.android.apps.docs	com.google.android.apps.docs.app.NewMainProxyActivity	Drive	official_brand
+ic_com_google_android_apps_photos	com.google.android.apps.photos	com.google.android.apps.photos.home.HomeActivity	Photos	mono_glass
+ios_wallet	com.google.android.apps.walletnfcrel	com.google.commerce.tapandpay.android.wallet.WalletActivity	Wallet	bespoke_ios
+ios_roblox	com.roblox.client	com.roblox.client.startup.LauncherAliasMain	Roblox	official_brand
+ios_calendar	com.samsung.android.calendar	com.samsung.android.app.calendar.activity.MainActivity	Calendar	bespoke_ios
+ios_calculator	com.sec.android.app.popupcalculator	com.sec.android.app.popupcalculator.Calculator	Calculator	bespoke_ios
+ios_safari	com.sec.android.app.sbrowser	com.sec.android.app.sbrowser.SBrowserMainActivity	Browser	bespoke_ios
+ios_snapchat	com.snapchat.android	com.snapchat.android.LandingPageActivity	Snapchat	official_brand
+ic_io_github_muntashirakon_appmanager	io.github.muntashirakon.AppManager	io.github.muntashirakon.AppManager.main.SplashActivity	App Manager	mono_glass
+ios_key_attestation	io.github.vvb2060.keyattestation	io.github.vvb2060.keyattestation.home.HomeActivity	Key Attestation	bespoke_ios
+ic_com_google_android_apps_bard	com.google.android.apps.bard	com.google.android.apps.bard.shellapp.BardEntryPointActivity	Gemini	mono_glass
+ic_com_google_android_googlequicksearchbox	com.google.android.googlequicksearchbox	com.google.android.googlequicksearchbox.SearchActivity	Google	mono_glass
+ios_files	com.sec.android.app.myfiles	com.sec.android.app.myfiles.ui.MainActivity	My Files	bespoke_ios
+ios_samsung_store	com.sec.android.app.samsungapps	com.sec.android.app.samsungapps.SamsungAppsMainActivity	Store	bespoke_ios
+ic_com_sec_android_easymover	com.sec.android.easyMover	com.sec.android.easyMover.ui.launch.LauncherActivity	Smart Switch	mono_glass
+ic_app_morphe_manager	app.morphe.manager	app.morphe.manager.MainActivity_Default	Morphe	mono_glass
+ic_app_revanced_android_gms	app.revanced.android.gms	org.microg.gms.ui.SettingsActivity	microG Settings	mono_glass
+ic_au_com_nab_mobile	au.com.nab.mobile	LauncherActivityAlias.Default	NAB	fg_glass
+ic_au_com_opal_travel	au.com.opal.travel	au.com.opal.travel.application.presentation.MainActivity	Opal Travel	fg_tonal
+ic_com_alibaba_aliexpresshd	com.alibaba.aliexpresshd	com.aliexpress.app.FirstActivity	AliExpress	fg_glass
+ic_com_alyaqdhan_mybattery	com.alyaqdhan.mybattery	com.alyaqdhan.mybattery.MainActivity	My Battery	fg_glass
+ios_amazon	com.amazon.mShop.android.shopping	com.amazon.mShop.home.HomeActivity	Amazon Shopping	bespoke_ios
+ic_com_apple_android_music	com.apple.android.music	com.apple.android.music.common.MainActivity	Apple Music	mono_glass
+ic_com_blackshark_flutter_toolbox	com.blackshark.flutter_toolbox	com.blackshark.flutter_toolbox.MainActivity	Shark Arsenal	fg_glass
+ios_bose	com.bose.monet	com.bose.monet.activity.discovery.SplashSearchingActivity	Bose Connect	official_brand
+ios_glassplayer	com.coloros.glassplayer	com.coloros.glassplayer.SettingsActivity	ColorOS Glass Player	bespoke_ios
+ic_com_cxinventor_file_explorer	com.cxinventor.file.explorer	com.alphainventor.filemanager.activity.MainActivity	Cx File Explorer	mono_glass
+ic_com_deniscerri_ytdl	com.deniscerri.ytdl	com.deniscerri.ytdl.Default	YTDLnis	mono_glass
+ic_com_discord	com.discord	com.discord.main.MainDefault	Discord	mono_glass
+ic_com_eatos_oneglass	com.eatos.oneglass	com.eatos.oneglass.MainActivity	OneGlass	mono_glass
+ios_ebay	com.ebay.mobile	com.ebay.mobile.home.impl.main.MainActivity	eBay	official_brand
+ic_com_eltavine_duckdetector	com.eltavine.duckdetector	android.app.NativeActivity	Duck Detector	mono_glass
+ic_com_epicgames_fortnite	com.epicgames.fortnite	com.epicgames.unreal.SplashActivity	Fortnite	fg_tonal
+ic_com_example_ghostespcompanion	com.example.ghostespcompanion	com.example.ghostespcompanion.MainActivity	GhostESP	mono_glass
+ic_com_fahadali_oneos	com.fahadali.oneos	com.fahadali.oneos.ui.MainActivity	OneOS	mono_glass
+ic_com_futuremark_dmandroid_application	com.futuremark.dmandroid.application	com.futuremark.flamenco.ui.splash.SplashPageActivity	3DMark	mono_glass
+ic_com_geode_launcher	com.geode.launcher	com.geode.launcher.MainActivity	Geode	mono_glass
+ic_com_giggles_mb	com.giggles.mb	com.giggles.mb.MainActivity	Giggles	fg_tonal
+ic_com_github_android	com.github.android	com.github.android.main.MainActivity	GitHub	mono_glass
+ic_com_google_android_apps_authenticator2	com.google.android.apps.authenticator2	com.google.android.apps.authenticator2.main.MainActivity	Authenticator	mono_glass
+ios_home	com.google.android.apps.chromecast.app	com.google.android.apps.chromecast.app.DiscoveryActivity	Home	bespoke_ios
+ic_com_google_android_apps_subscriptions_red	com.google.android.apps.subscriptions.red	com.google.android.apps.subscriptions.red.LauncherActivity	Google One	mono_glass
+ios_wallpapers	com.google.android.apps.wallpaper	com.google.android.apps.wallpaper.picker.CategoryPickerActivity	Wallpapers	bespoke_ios
+ic_com_htetznaing_zfile	com.htetznaing.zfile	com.htetz.zfile4.MainActivity	zFile	mono_glass
+ic_com_htetznaing_zfont2	com.htetznaing.zfont2	com.htetz.zfontcompose.MainActivity	zFont 3	mono_glass
+ic_com_illusion_checkfirm	com.illusion.checkfirm	com.illusion.checkfirm.features.main.ui.MainActivity	CheckFirm	mono_glass
+ic_com_instagram_android	com.instagram.android	com.instagram.android.activity.MainTabActivity	Instagram	mono_glass
+ic_com_legendsayantan_adbtools	com.legendsayantan.adbtools	com.legendsayantan.adbtools.InitialActivity	ShizuTools	mono_glass
+ic_com_liqui_glossy_app	com.liqui.glossy.app	com.liqui.glossy.app.MainActivity	LiqUI Glossy	fg_glass
+ic_com_lsfg_android	com.lsfg.android	com.lsfg.android.ui.MainActivity	LSFG Android	fg_tonal
+ios_mcdonalds	com.mcdonalds.au.gma	com.mcdonalds.mcdcoreapp.common.activity.SplashActivity	MyMacca's	official_brand
+ic_com_mihoyo_yuanshen	com.miHoYo.Yuanshen	org.yuzu.yuzu_emu.ui.main.MainActivity	Eden Optimized	fg_tonal
+ic_com_oculus_twilight	com.oculus.twilight	com.oculus.twilight.crossapp.activity.XOCLoginActivity	Meta Horizon	mono_glass
+ic_com_openai_chatgpt	com.openai.chatgpt	com.openai.chatgpt.MainActivity	ChatGPT	mono_glass
+ic_com_paradyme_solarsmash	com.paradyme.solarsmash	com.unity3d.player.UnityPlayerActivity	Solar Smash	fg_tonal
+ic_com_reddit_frontpage	com.reddit.frontpage	launcher.default	Reddit	mono_glass
+ic_com_robtopx_geometryjump	com.robtopx.geometryjump	com.robtopx.geometryjump.GeometryJump	Geometry Dash	fg_tonal
+ios_findmy	com.samsung.android.app.find	com.samsung.android.app.find.MainActivity	Find	bespoke_ios
+ios_notes	com.samsung.android.app.notes	com.samsung.android.app.notes.memolist.MemoListActivity	Notes	bespoke_ios
+ic_com_samsung_android_app_routineplus	com.samsung.android.app.routineplus	com.samsung.android.app.routineplus.main.RoutinePlusLauncher	Routines +	mono_glass
+ic_com_samsung_android_app_watchmanager	com.samsung.android.app.watchmanager	com.samsung.android.app.watchmanager.setupwizard.SetupWizardWelcomeActivity	Wearable	mono_glass
+ic_com_samsung_android_game_gamehome	com.samsung.android.game.gamehome	com.samsung.android.game.gamehome.app.MainActivity	Gaming Hub	mono_glass
+ic_com_samsung_android_game_honeyplayplus	com.samsung.android.game.honeyplayplus	com.samsung.android.game.honeyplayplus.main.ui.LaunchActivity	Game Booster +	mono_glass
+ic_com_samsung_android_goodlock	com.samsung.android.goodlock	com.samsung.android.goodlock.MainActivity	Good Lock	mono_glass
+ios_samsung_wallet	com.samsung.android.spay	com.samsung.android.spay.ui.SpayMainActivity	Wallet	bespoke_ios
+ic_com_samsung_android_themedesigner	com.samsung.android.themedesigner	com.samsung.android.themedesigner.ui.view.SplashComposeActivity	Theme Park	mono_glass
+ic_com_samsung_android_voc	com.samsung.android.voc	com.samsung.android.voc.LauncherActivity	Members	mono_glass
+ic_com_samsung_ecomm_global_gbr	com.samsung.ecomm.global.gbr	com.samsung.ecomm.global.shop_app.MainActivity	Samsung Shop	mono_glass
+ios_clock	com.sec.android.app.clockpackage	com.sec.android.app.clockpackage.ClockPackage	Clock	bespoke_ios
+ios_voicenote	com.sec.android.app.voicenote	com.sec.android.app.voicenote.main.VNMainActivity	Voice Recorder	bespoke_ios
+ic_com_sec_penup	com.sec.penup	com.sec.penup.ui.SplashActivity	PENUP	mono_glass
+ios_sonos	com.sonos.acr2	com.sonos.passport.ui.launcheractivity.LauncherActivity	Sonos	official_brand
+ic_com_stardesk	com.stardesk	com.remote.app.ui.activity.LaunchActivity	StarDesk	fg_glass
+ic_com_stremio_one	com.stremio.one	com.stremio.android.MainActivity	Stremio	mono_glass
+ic_com_supercell_brawlstars	com.supercell.brawlstars	com.supercell.brawlstars.GameApp	Brawl Stars	fg_tonal
+ic_com_surfshark_vpnclient_android	com.surfshark.vpnclient.android	com.surfshark.vpnclient.android.StartActivity	Surfshark	mono_glass
+ic_com_termux	com.termux	com.termux.app.TermuxActivity	Termux	mono_glass
+ic_com_twitter_android	com.twitter.android	com.x.android.main.MainActivity	X	mono_glass
+ic_com_ubnt_easyunifi	com.ubnt.easyunifi	com.ubnt.unifi.network.splashscreen.SplashScreenActivity	UniFi	mono_glass
+ic_com_ubnt_usurvey	com.ubnt.usurvey	com.ubnt.usurvey.ui.splash.SplashActivity	WiFiman	mono_glass
+ios_steam	com.valvesoftware.android.steam.community	com.valvesoftware.android.steam.community.MainActivity	Steam	official_brand
+ic_com_whatsapp	com.whatsapp	com.whatsapp.Main	WhatsApp	mono_glass
+ic_dev_android_dynamicisland	dev.android.dynamicisland	dev.android.dynamicisland.settings.SettingsActivity	Dynamic Island	mono_glass
+ic_df_root	df.root	df.root.MainActivity	DirtyFrag	mono_glass
+ic_flar2_devcheck	flar2.devcheck	flar2.devcheck.MainActivity	DevCheck	mono_glass
+ic_git_artdeell_mjlaunch	git.artdeell.mjlaunch	net.kdt.pojavlaunch.TestStorageActivity	MJLauncher	fg_glass
+ic_in_sunilpaulmathew_ashell	in.sunilpaulmathew.ashell	in.sunilpaulmathew.ashell.activities.aShellActivity	aShell	fg_glass
+ic_io_github_aureliomo_glassui	io.github.aureliomo.glassui	dev.colorcc.app.GlassUiActivity	Glass UI	mono_glass
+ic_io_github_samolego_canta	io.github.samolego.canta	io.github.samolego.canta.MainActivity	Canta	mono_glass
+ic_me_kavishdevar_librepods	me.kavishdevar.librepods	me.kavishdevar.librepods.MainActivity	LibrePods	mono_glass
+ic_me_weishu_kernelsu	me.weishu.kernelsu	me.weishu.kernelsu.ui.MainActivity	KernelSU	mono_glass
+ic_moe_shizuku_privileged_api	moe.shizuku.privileged.api	moe.shizuku.manager.MainActivity	Shizuku	mono_glass
+ic_org_telegram_messenger_web	org.telegram.messenger.web	org.telegram.messenger.DefaultIcon	Telegram	mono_glass
