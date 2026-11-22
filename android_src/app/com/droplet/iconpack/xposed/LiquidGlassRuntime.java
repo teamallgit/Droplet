@@ -1,4 +1,4 @@
-package com.oneliquid.iconpack.xposed;
+package com.droplet.iconpack.xposed;
 
 import android.app.WallpaperManager;
 import android.content.Context;
@@ -34,7 +34,7 @@ import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
 /**
- * OneLiquid v2.5.0 — Heavily Optimized Real-Time iOS 26 Liquid Glass Optical Engine.
+ * Droplet v2.5.0 — Heavily Optimized Real-Time iOS 26 Liquid Glass Optical Engine.
  *
  * Key Performance & Visual Upgrades:
  *  - ~18x faster GPU fragment shader: pre-blurs tiny 144x312 wallpaper textures ONCE per frame on a
@@ -50,7 +50,7 @@ import java.util.WeakHashMap;
  */
 public final class LiquidGlassRuntime {
 
-    private static final String TAG = "OneLiquid-Glass: ";
+    private static final String TAG = "Droplet-Glass: ";
 
     // Crisp 1/4-res Home texture (270x585 -> ~2.5ms background blur + GPU FILTER_MODE_LINEAR = zero pixelation!)
     // + ultra-silky 90x195 2-pass blurred App Drawer texture (~0.3ms + FILTER_MODE_LINEAR = ~140px smooth Gaussian!)
@@ -384,7 +384,7 @@ public final class LiquidGlassRuntime {
     }
 
     /**
-     * Called by OneLiquidHook when icons are actively scrolling/dragging so we pause Binder wallpaper
+     * Called by DropletHook when icons are actively scrolling/dragging so we pause Binder wallpaper
      * capture for 180ms — keeping Home Screen & App Drawer scrolling locked at 120fps with zero stutter!
      */
     public static void noteScrollMotion() {
@@ -800,7 +800,7 @@ public final class LiquidGlassRuntime {
         if (sCapRunning) return;
         if (sHomeWallShader != null && !sIsLiveWallpaper) return;
         if (sCapThread == null) {
-            sCapThread = new HandlerThread("OneLiquid-WallCap", Process.THREAD_PRIORITY_LOWEST);
+            sCapThread = new HandlerThread("Droplet-WallCap", Process.THREAD_PRIORITY_LOWEST);
             sCapThread.start();
             sCapHandler = new Handler(sCapThread.getLooper());
         }
@@ -981,10 +981,10 @@ public final class LiquidGlassRuntime {
     }
 
     /**
-     * Extracts the pure floating frosted-white glyph from a baked OneLiquid icon,
+     * Extracts the pure floating frosted-white glyph from a baked Droplet icon,
      * scaled boldly (1.08x) with a whisper-soft suspended glass elevation shadow.
      */
-    public static Bitmap extractPureGlyphFromOneLiquid(Bitmap src) {
+    public static Bitmap extractPureGlyphFromDroplet(Bitmap src) {
         if (src == null || src.isRecycled()) return null;
         int w = src.getWidth();
         int h = src.getHeight();

@@ -7,7 +7,7 @@ BASE_DIR = "."
 ICONS_DIR = os.path.join(BASE_DIR, "icons")
 ANDROID_SRC_DIR = os.path.join(BASE_DIR, "android_src")
 APK_PROJ = os.path.join(BASE_DIR, "apk_build")
-OUT_APK = os.path.join(BASE_DIR, "OneLiquid.apk")
+OUT_APK = os.path.join(BASE_DIR, "Droplet.apk")
 
 JAVA_HOME = "/opt/homebrew/opt/openjdk@17"
 BUILD_TOOLS = "/opt/homebrew/share/android-commandlinetools/build-tools/35.0.0"
@@ -60,14 +60,14 @@ def generate_appfilter_xml(rows, extra_rows=None):
         '    <item component=":PHONE" drawable="ios_phone" />',
         '    <item component=":SMS" drawable="ios_messages" />',
         '',
-        '    <!-- OneLiquid itself -->',
-        '    <item component="ComponentInfo{com.oneliquid.iconpack/com.oneliquid.iconpack.MainActivity}" drawable="ic_oneliquid_launcher" />',
+        '    <!-- Droplet itself -->',
+        '    <item component="ComponentInfo{com.droplet.iconpack/com.droplet.iconpack.MainActivity}" drawable="ic_droplet_launcher" />',
         '',
         '    <!-- Core installed & One UI apps -->',
     ]
 
     seen_components = {
-        "ComponentInfo{com.oneliquid.iconpack/com.oneliquid.iconpack.MainActivity}"
+        "ComponentInfo{com.droplet.iconpack/com.droplet.iconpack.MainActivity}"
     }
     for res_name, pkg, cls, label, tier in rows:
         comp = f"ComponentInfo{{{pkg}/{cls}}}"
@@ -121,10 +121,10 @@ def generate_drawable_xml(rows, extra_rows=None):
         '<?xml version="1.0" encoding="utf-8"?>',
         '<resources>',
         '    <version>1</version>',
-        '    <category title="OneLiquid Core" />',
-        '    <item drawable="ic_oneliquid_launcher" />',
+        '    <category title="Droplet Core" />',
+        '    <item drawable="ic_droplet_launcher" />',
     ]
-    seen = {"ic_oneliquid_launcher"}
+    seen = {"ic_droplet_launcher"}
     for res_name, pkg, cls, label, tier in rows:
         if tier in ("bespoke_ios", "official_brand") and res_name not in seen:
             seen.add(res_name)
@@ -178,7 +178,7 @@ def generate_xposed_scope_xml():
 def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.oneliquid.iconpack"
+    package="com.droplet.iconpack"
     android:versionCode="20"
     android:versionName="2.6.0">
 
@@ -204,7 +204,7 @@ def generate_manifest():
     </queries>
 
     <application
-        android:label="OneLiquid"
+        android:label="Droplet"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false">
 
@@ -217,7 +217,7 @@ def generate_manifest():
 
         <activity
             android:name=".MainActivity"
-            android:label="OneLiquid"
+            android:label="Droplet"
             android:exported="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
@@ -326,7 +326,7 @@ def main():
         if stem not in ("ic_glass_back", "ic_glass_mask", "ic_glass_upon"):
             all_drawables.append(stem)
 
-    shutil.copy2(os.path.join(ICONS_DIR, "ic_oneliquid_launcher.png"), os.path.join(mipmap_dir, "ic_launcher.png"))
+    shutil.copy2(os.path.join(ICONS_DIR, "ic_droplet_launcher.png"), os.path.join(mipmap_dir, "ic_launcher.png"))
 
     appfilter_xml = generate_appfilter_xml(rows, extra_rows)
     drawable_xml = generate_drawable_xml(rows, extra_rows)
@@ -345,7 +345,7 @@ def main():
 
     # Xposed / LSPosed module entry point
     with open(os.path.join(assets_dir, "xposed_init"), "w", encoding="utf-8") as f:
-        f.write("com.oneliquid.iconpack.xposed.OneLiquidHook\n")
+        f.write("com.droplet.iconpack.xposed.DropletHook\n")
 
     manifest_path = os.path.join(APK_PROJ, "AndroidManifest.xml")
     with open(manifest_path, "w", encoding="utf-8") as f:
@@ -383,7 +383,7 @@ def main():
         *stub_javas,
     ], env=env)
 
-    # 2. Compile OneLiquid app + LSPosed module classes against ANDROID_JAR + stub_classes
+    # 2. Compile Droplet app + LSPosed module classes against ANDROID_JAR + stub_classes
     app_classes = os.path.join(build_dir, "app_classes")
     os.makedirs(app_classes, exist_ok=True)
     app_javas = collect_java_files(os.path.join(ANDROID_SRC_DIR, "app"))
@@ -394,7 +394,7 @@ def main():
         *app_javas,
     ], env=env)
 
-    # 3. DEX ONLY OneLiquid's own classes (LSPosed supplies de.robv.android.xposed.* at runtime!)
+    # 3. DEX ONLY Droplet's own classes (LSPosed supplies de.robv.android.xposed.* at runtime!)
     class_files = []
     for root_d, _, files in os.walk(app_classes):
         for fn in files:

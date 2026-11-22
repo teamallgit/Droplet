@@ -1,4 +1,4 @@
-package com.oneliquid.iconpack.xposed;
+package com.droplet.iconpack.xposed;
 
 import android.app.Activity;
 import android.app.Application;
@@ -24,7 +24,7 @@ import android.view.View;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
-import com.oneliquid.iconpack.ModuleStatus;
+import com.droplet.iconpack.ModuleStatus;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XSharedPreferences;
@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.xmlpull.v1.XmlPullParser;
 
 /**
- * OneLiquid v2.1.0 LSPosed Module for Samsung One UI 8 / 8.5 / 9+.
+ * Droplet v2.1.0 LSPosed Module for Samsung One UI 8 / 8.5 / 9+.
  *
  * Renders TRUE real-time GPU AGSL "Liquid Syrup" Glass Refraction on every Home Screen icon:
  *  - Live wallpaper BitmapShader sampling (Snell's-law edge bend + convex lens magnification + RGB dispersion)
@@ -51,9 +51,9 @@ import org.xmlpull.v1.XmlPullParser;
  *  - Clean pure-glyph separation so icons float INSIDE the live refracting glass droplet (zero double boxes!)
  *  - Liquid Glass Folders & SystemUI Glass Polish (Dock hook removed per user request)
  */
-public final class OneLiquidHook implements IXposedHookLoadPackage {
+public final class DropletHook implements IXposedHookLoadPackage {
 
-    private static final String TAG = "OneLiquid-LSPosed: ";
+    private static final String TAG = "Droplet-LSPosed: ";
     private static volatile XSharedPreferences sPrefs;
     private static volatile Resources sModuleRes;
     private static volatile Map<String, String> sCompMap;
@@ -240,7 +240,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private void hookSelf(ClassLoader cl) {
         try {
             XposedHelpers.findAndHookMethod(
-                "com.oneliquid.iconpack.ModuleStatus",
+                "com.droplet.iconpack.ModuleStatus",
                 cl,
                 "isModuleActive",
                 new XC_MethodHook() {
@@ -492,7 +492,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             sPkgMap = pkgMap;
             sLabelToDrawableMap = labelMap;
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "Failed loading OneLiquid resources: " + t);
+            XposedBridge.log(TAG + "Failed loading Droplet resources: " + t);
         }
     }
 
@@ -587,7 +587,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                                 if ("ios_notes".equals(drawName) || "ios_maps".equals(drawName) || "ios_clock".equals(drawName)) {
                                     pure = ((BitmapDrawable) d).getBitmap();
                                 } else {
-                                    pure = LiquidGlassRuntime.extractPureGlyphFromOneLiquid(((BitmapDrawable) d).getBitmap());
+                                    pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(((BitmapDrawable) d).getBitmap());
                                 }
                                 if (pure != null) sPureGlyphCache.put(drawName, pure);
                             }
@@ -611,10 +611,10 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
             }
         }
 
-        // If Theme Park OneLiquid is active and live refraction is ON, strip the static plate from orig too!
+        // If Theme Park Droplet is active and live refraction is ON, strip the static plate from orig too!
         if (liveRefraction && orig instanceof BitmapDrawable && ((BitmapDrawable) orig).getBitmap() != null
                 && LiquidGlassRuntime.isAlreadyTranslucentGlass(orig)) {
-            Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromOneLiquid(((BitmapDrawable) orig).getBitmap());
+            Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(((BitmapDrawable) orig).getBitmap());
             if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
         }
 

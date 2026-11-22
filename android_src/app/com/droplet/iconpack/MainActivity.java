@@ -1,4 +1,4 @@
-package com.oneliquid.iconpack;
+package com.droplet.iconpack;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -42,7 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Clean Samsung One UI 8 / 9 Dark Settings interface for OneLiquid.
+ * Clean Samsung One UI 8 / 9 Dark Settings interface for Droplet.
  * - Native One UI black canvas (#000000), 26dp rounded #1C1C1E grouped cards, #3E8BFF One UI Blue accent
  * - Automatic LSPosed detection: guides setup & grays out root-only controls when inactive
  * - Master On/Off switch bar, live Clarity/Frost, Magnification, and Corner Glow sliders
@@ -213,7 +213,7 @@ public class MainActivity extends Activity {
         header.setPadding(dp(10), dp(6), dp(10), dp(14));
 
         ImageView logoView = new ImageView(this);
-        int logoId = getResources().getIdentifier("ic_oneliquid_launcher", "drawable", getPackageName());
+        int logoId = getResources().getIdentifier("ic_droplet_launcher", "drawable", getPackageName());
         if (logoId == 0) logoId = getResources().getIdentifier("ic_launcher", "mipmap", getPackageName());
         if (logoId != 0) logoView.setImageResource(logoId);
         LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(44), dp(44));
@@ -223,7 +223,7 @@ public class MainActivity extends Activity {
         LinearLayout titleCol = new LinearLayout(this);
         titleCol.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(this);
-        title.setText("OneLiquid");
+        title.setText("Droplet");
         title.setTextColor(COL_TEXT_PRI);
         title.setTextSize(26f);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
@@ -395,7 +395,7 @@ public class MainActivity extends Activity {
         guideSteps.setText(
                 "Live magnification, clarity sliders, and refracting glass require root + LSPosed. "
                         + "Without root, you can still apply all " + allIcons.length + " static icons from the Icons tab.\n\n"
-                        + "1. Open LSPosed Manager → Modules → OneLiquid\n"
+                        + "1. Open LSPosed Manager → Modules → Droplet\n"
                         + "2. Turn it on and select One UI Home & SystemUI\n"
                         + "3. Restart One UI Home below");
         guideSteps.setTextColor(COL_TEXT_SEC);
@@ -1213,7 +1213,7 @@ public class MainActivity extends Activity {
         Intent tp = getPackageManager().getLaunchIntentForPackage(ModuleStatus.PKG_THEME_PARK);
         if (tp != null) {
             tp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            Toast.makeText(this, "Theme Park → Icon → Create New → Iconpack → OneLiquid", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Theme Park → Icon → Create New → Iconpack → Droplet", Toast.LENGTH_LONG).show();
             startActivity(tp);
             return;
         }

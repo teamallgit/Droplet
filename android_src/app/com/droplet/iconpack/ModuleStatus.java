@@ -1,4 +1,4 @@
-package com.oneliquid.iconpack;
+package com.droplet.iconpack;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -10,8 +10,8 @@ import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
 public final class ModuleStatus {
-    public static final String PKG = "com.oneliquid.iconpack";
-    public static final String PREFS_NAME = "oneliquid_prefs";
+    public static final String PKG = "com.droplet.iconpack";
+    public static final String PREFS_NAME = "droplet_prefs";
 
     public static final String KEY_LSPOSED_ENABLED = "lsposed_enabled";
     public static final String KEY_LIQUID_ICONS = "opt_liquid_icons";
@@ -28,10 +28,10 @@ public final class ModuleStatus {
     // Legacy fallback key
     public static final String KEY_REFRACTION_LEVEL = "opt_refraction_level";
 
-    public static final String ACTION_PING_HOME = "com.oneliquid.iconpack.ACTION_PING_HOME";
-    public static final String ACTION_PING_SYSUI = "com.oneliquid.iconpack.ACTION_PING_SYSUI";
-    public static final String ACTION_PONG = "com.oneliquid.iconpack.ACTION_PONG";
-    public static final String ACTION_RELOAD_PREFS = "com.oneliquid.iconpack.ACTION_RELOAD_PREFS";
+    public static final String ACTION_PING_HOME = "com.droplet.iconpack.ACTION_PING_HOME";
+    public static final String ACTION_PING_SYSUI = "com.droplet.iconpack.ACTION_PING_SYSUI";
+    public static final String ACTION_PONG = "com.droplet.iconpack.ACTION_PONG";
+    public static final String ACTION_RELOAD_PREFS = "com.droplet.iconpack.ACTION_RELOAD_PREFS";
 
     public static final String PKG_ONEUI_HOME = "com.sec.android.app.launcher";
     public static final String PKG_SYSTEMUI = "com.android.systemui";
