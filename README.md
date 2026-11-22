@@ -18,11 +18,15 @@
 - **1,020+ Liquid Glass Icons** — Full coverage of mainstream & niche Android apps (mapped across thousands of `ComponentInfo` activities in `appfilter.xml`), combining exact official brand SVGs (Chrome, YouTube, Spotify, Steam, Google Play, Google Drive, App Store, Snapchat, Roblox, Bose, Sonos, eBay, McDonald's), bespoke iOS 26 Clear system icons, and 900+ mainstream & niche vectors sourced from [Lawnicons](https://github.com/LawnchairLauncher/lawnicons) + [Simple Icons](https://simpleicons.org/).
 - **Universal Launcher Fallback** — Includes `iconback`, `iconmask`, and `iconupon` Liquid Glass framing so unthemed apps still blend in.
 
-## Icon Preview
+## Icon Preview (288 of 1,020+ Icons)
 
 | Part 1 | Part 2 |
 | :---: | :---: |
 | ![OneLiquid Preview Part 1](assets/preview_part1.png) | ![OneLiquid Preview Part 2](assets/preview_part2.png) |
+
+| Part 3 | Part 4 |
+| :---: | :---: |
+| ![OneLiquid Preview Part 3](assets/preview_part3.png) | ![OneLiquid Preview Part 4](assets/preview_part4.png) |
 
 ## Installation (Samsung One UI)
 
