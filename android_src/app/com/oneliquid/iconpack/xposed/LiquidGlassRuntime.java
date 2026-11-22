@@ -1,12 +1,12 @@
 package com.oneliquid.iconpack.xposed;
 
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
@@ -28,7 +28,17 @@ import java.lang.reflect.Method;
  */
 public final class LiquidGlassRuntime {
 
-    // Live AGSL fragment shader for 1:1 iOS 26 Clear Liquid Glass Fresnel rim + scroll-reactive caustics
+    /**
+     * Marker BitmapDrawable subclass so OneLiquidHook NEVER double-wraps an icon
+     * that OneLiquid already replaced or transformed.
+     */
+    public static final class LiquidGlassDrawable extends BitmapDrawable {
+        public LiquidGlassDrawable(Resources res, Bitmap bitmap) {
+            super(res, bitmap);
+        }
+    }
+
+    // Live AGSL fragment shader for 1:1 iOS 26 Clear Liquid Glass scroll-reactive Fresnel caustics
     private static final String LIQUID_RIM_AGSL =
         "uniform float2 uSize;\n" +
         "uniform float2 uLightShift;\n" +
@@ -42,22 +52,22 @@ public final class LiquidGlassRuntime {
         "half4 main(float2 fragCoord) {\n" +
         "    float2 halfSize = uSize * 0.5;\n" +
         "    float2 p = fragCoord - halfSize;\n" +
-        "    float n = uCornerRatio > 0.35 ? 2.8 : 4.5;\n" +
-        "    float sdf = squircleSdf(p, halfSize - float2(1.5), n);\n" +
-        "    if (sdf > 1.5) return half4(0.0);\n" +
+        "    float n = uCornerRatio > 0.35 ? 2.6 : 4.5;\n" +
+        "    float sdf = squircleSdf(p, halfSize - float2(1.0), n);\n" +
+        "    if (sdf > 1.2) return half4(0.0);\n" +
         "    float dIn = max(-sdf, 0.0);\n" +
         "    float2 norm = normalize(p / max(halfSize, float2(1.0)) + float2(0.0001));\n" +
-        "    float2 tlDir = normalize(float2(-0.707, -0.707) + uLightShift * 0.25);\n" +
+        "    float2 tlDir = normalize(float2(-0.707, -0.707) + uLightShift * 0.32);\n" +
         "    float2 brDir = -tlDir;\n" +
         "    float cosTL = max(0.0, dot(norm, tlDir));\n" +
         "    float cosBR = max(0.0, dot(norm, brDir));\n" +
-        "    float rimBand = exp(-pow((dIn - 1.3) / 1.45, 2.0));\n" +
-        "    float rimPower = 0.28 + 0.68 * pow(cosTL, 1.7) + 0.48 * pow(cosBR, 2.0);\n" +
-        "    float innerGlow = exp(-pow((dIn - 4.0) / 8.5, 2.0)) * (0.04 + 0.22 * pow(cosTL, 2.4) + 0.16 * pow(cosBR, 2.6));\n" +
-        "    float sparkle = exp(-pow((dIn - 1.8) / 1.1, 2.0)) * (0.48 * pow(cosTL, 5.0) + 0.34 * pow(cosBR, 5.2));\n" +
-        "    float a = clamp((rimBand * rimPower + innerGlow + sparkle) * uIntensity, 0.0, 0.92);\n" +
+        "    float rimBand = exp(-pow((dIn - 1.1) / 1.25, 2.0));\n" +
+        "    float rimPower = 0.16 + 0.72 * pow(cosTL, 2.2) + 0.52 * pow(cosBR, 2.5);\n" +
+        "    float innerGlow = exp(-pow((dIn - 3.8) / 7.5, 2.0)) * (0.18 * pow(cosTL, 3.0) + 0.12 * pow(cosBR, 3.2));\n" +
+        "    float sparkle = exp(-pow((dIn - 1.5) / 1.0, 2.0)) * (0.55 * pow(cosTL, 5.5) + 0.38 * pow(cosBR, 5.8));\n" +
+        "    float a = clamp((rimBand * rimPower + innerGlow + sparkle) * uIntensity, 0.0, 0.88);\n" +
         "    float mask = clamp(0.5 - sdf, 0.0, 1.0);\n" +
-        "    return half4(half3(1.0, 0.995, 1.0) * a * mask, a * mask);\n" +
+        "    return half4(half3(1.0, 0.996, 1.0) * a * mask, a * mask);\n" +
         "}\n";
 
     private static RuntimeShader sIconShader;
@@ -65,11 +75,64 @@ public final class LiquidGlassRuntime {
     private static boolean sShaderFailed = false;
 
     /**
+     * Detects whether an incoming Drawable is ALREADY a translucent Liquid Glass icon
+     * (e.g. already applied via Theme Park with OneLiquid or another glass icon pack).
+     * Prevents double-wrapping / nested squircles!
+     */
+    public static boolean isAlreadyTranslucentGlass(Drawable d) {
+        if (d == null) return false;
+        if (d instanceof LiquidGlassDrawable) return true;
+        try {
+            Bitmap bmp = null;
+            boolean shouldRecycle = false;
+            if (d instanceof BitmapDrawable) {
+                bmp = ((BitmapDrawable) d).getBitmap();
+            }
+            if (bmp == null || bmp.isRecycled()) {
+                int s = 32;
+                bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
+                Canvas c = new Canvas(bmp);
+                d.setBounds(0, 0, s, s);
+                d.draw(c);
+                shouldRecycle = true;
+            }
+            int w = bmp.getWidth();
+            int h = bmp.getHeight();
+            if (w < 8 || h < 8) {
+                if (shouldRecycle) bmp.recycle();
+                return false;
+            }
+            // Sample 8 perimeter-interior glass-plate points (avoiding center glyph & outer transparent corner)
+            int[][] pts = {
+                { w / 6, h / 2 }, { w - w / 6, h / 2 },
+                { w / 2, h / 6 }, { w / 2, h - h / 6 },
+                { w / 5, h / 5 }, { w - w / 5, h / 5 },
+                { w / 5, h - h / 5 }, { w - w / 5, h - h / 5 }
+            };
+            int translucentCount = 0;
+            for (int[] pt : pts) {
+                int px = Math.max(0, Math.min(w - 1, pt[0]));
+                int py = Math.max(0, Math.min(h - 1, pt[1]));
+                int alpha = Color.alpha(bmp.getPixel(px, py));
+                // Translucent glass plate pixels have alpha roughly in [18..195]
+                if (alpha >= 18 && alpha <= 195) {
+                    translucentCount++;
+                }
+            }
+            if (shouldRecycle) bmp.recycle();
+            // If >= 4 of the 8 plate samples are semi-transparent, this icon is ALREADY translucent glass!
+            return translucentCount >= 4;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
      * Draws a live scroll-reactive AGSL Fresnel specular glass rim over an icon, folder, or dock pill.
      */
     public static void drawLiveLiquidRim(Canvas canvas, float left, float top, float width, float height,
                                          float lightShiftX, float lightShiftY, boolean isPill, float intensity) {
-        if (width < 12f || height < 12f) return;
+        if (width < 12f || height < 12f || intensity <= 0.01f) return;
         if (Build.VERSION.SDK_INT >= 33 && !sShaderFailed) {
             try {
                 if (sIconShader == null) {
@@ -91,33 +154,30 @@ public final class LiquidGlassRuntime {
                 sShaderFailed = true;
             }
         }
-        // Fallback crisp canvas specular rim if AGSL unavailable
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setStyle(Paint.Style.STROKE);
-        p.setStrokeWidth(Math.max(1.5f, width * 0.014f));
+        p.setStrokeWidth(Math.max(1.2f, width * 0.012f));
         p.setShader(new LinearGradient(
                 left, top, left + width, top + height,
-                new int[] { Color.argb((int) (210 * intensity), 255, 255, 255),
-                            Color.argb((int) (75 * intensity), 255, 255, 255),
-                            Color.argb((int) (175 * intensity), 255, 255, 255) },
+                new int[] { Color.argb((int) (180 * intensity), 255, 255, 255),
+                            Color.argb((int) (45 * intensity), 255, 255, 255),
+                            Color.argb((int) (150 * intensity), 255, 255, 255) },
                 new float[] { 0f, 0.5f, 1f },
                 Shader.TileMode.CLAMP
         ));
-        float r = isPill ? Math.min(width, height) * 0.45f : Math.min(width, height) * 0.235f;
+        float r = isPill ? Math.min(width, height) * 0.46f : Math.min(width, height) * 0.235f;
         canvas.drawRoundRect(new RectF(left + 1f, top + 1f, left + width - 1f, top + height - 1f), r, r, p);
     }
 
     /**
      * Enables Samsung One UI's native 120fps hardware backdrop blur (SemBlurInfo) on any View.
-     * Everything moving behind the View blurs & shimmers live!
      */
     public static boolean applySemBlur(View view, int blurRadius, float cornerRadiusPx, int bgTintColor) {
         if (view == null) return false;
         try {
             Class<?> builderCls = Class.forName("android.view.SemBlurInfo$Builder");
-            // BLUR_MODE_WINDOW = 0 (real-time window/wallpaper backdrop blur!)
             Constructor<?> ctor = builderCls.getConstructor(int.class);
-            Object builder = ctor.newInstance(0);
+            Object builder = ctor.newInstance(0); // BLUR_MODE_WINDOW
             try {
                 builderCls.getMethod("setRadius", int.class).invoke(builder, blurRadius);
             } catch (Throwable ignored) {}
@@ -146,30 +206,37 @@ public final class LiquidGlassRuntime {
     }
 
     /**
-     * Applies a smooth iOS 26 rounded glass capsule pill background + outline clip to One UI's Hotseat dock.
+     * Styles One UI's Hotseat dock container into a floating iOS 26 Clear Liquid Glass capsule pill.
      */
     public static void styleGlassDock(View dockView, float density) {
-        if (dockView == null) return;
-        float r = 28f * density;
+        if (dockView == null || dockView.getWidth() < 40 || dockView.getHeight() < 30) return;
+        final float r = Math.min(32f * density, dockView.getHeight() * 0.44f);
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.RECTANGLE);
         bg.setCornerRadius(r);
-        bg.setColor(Color.argb(38, 255, 255, 255));
-        bg.setStroke(Math.max(1, Math.round(1.1f * density)), Color.argb(120, 255, 255, 255));
+        bg.setColor(Color.argb(34, 255, 255, 255));
+        bg.setStroke(Math.max(1, Math.round(1.0f * density)), Color.argb(105, 255, 255, 255));
         dockView.setBackground(bg);
         dockView.setClipToOutline(true);
         dockView.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View v, Outline outline) {
-                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), Math.min(r, v.getHeight() * 0.48f));
+                int padX = Math.round(10f * density);
+                int padY = Math.round(2f * density);
+                int w = v.getWidth();
+                int h = v.getHeight();
+                if (w > padX * 2 && h > padY * 2) {
+                    outline.setRoundRect(padX, padY, w - padX, h - padY, Math.min(r, (h - padY * 2) * 0.48f));
+                } else {
+                    outline.setRoundRect(0, 0, w, h, Math.min(r, h * 0.48f));
+                }
             }
         });
-        applySemBlur(dockView, 75, r, Color.argb(34, 245, 248, 255));
+        applySemBlur(dockView, 80, r, Color.argb(30, 245, 250, 255));
     }
 
     /**
-     * On-the-fly fallback converter for any unthemed app not in our 1,020 icon pack:
-     * transforms any Android Drawable into a cohesive 1:1 iOS 26 Clear Liquid Glass bitmap.
+     * On-the-fly fallback converter ONLY for opaque stock icons not found in our 1,020 icon pack.
      */
     public static Bitmap convertDrawableToLiquidGlass(Drawable src, int sizePx) {
         if (src == null || sizePx <= 0) return null;
@@ -177,8 +244,8 @@ public final class LiquidGlassRuntime {
         Bitmap out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
 
-        // 1. Translucent iOS 26 squircle glass body
-        float pad = sz * 0.025f;
+        // Match exact OneLiquid MARGIN/SIZE ratio (10/512 = 1.95%)
+        float pad = sz * 0.0195f;
         RectF rect = new RectF(pad, pad, sz - pad, sz - pad);
         float cr = (sz - 2f * pad) * 0.24f;
 
@@ -191,7 +258,6 @@ public final class LiquidGlassRuntime {
         ));
         c.drawRoundRect(rect, cr, cr, bodyPaint);
 
-        // 2. Extract foreground/monochrome glyph and render as pure-white top-to-bottom translucent glass
         Drawable glyphSrc = src;
         if (Build.VERSION.SDK_INT >= 33 && src instanceof AdaptiveIconDrawable) {
             AdaptiveIconDrawable aid = (AdaptiveIconDrawable) src;
@@ -205,13 +271,12 @@ public final class LiquidGlassRuntime {
             if (aid.getForeground() != null) glyphSrc = aid.getForeground();
         }
 
-        int gSz = Math.round(sz * 0.64f);
+        int gSz = Math.round(sz * 0.66f);
         Bitmap rawGlyph = Bitmap.createBitmap(gSz, gSz, Bitmap.Config.ARGB_8888);
         Canvas gc = new Canvas(rawGlyph);
         glyphSrc.setBounds(0, 0, gSz, gSz);
         glyphSrc.draw(gc);
 
-        // Convert glyph alpha/luminance into luminous pure-white frosted glass gradient
         Bitmap frosted = Bitmap.createBitmap(gSz, gSz, Bitmap.Config.ARGB_8888);
         Canvas fc = new Canvas(frosted);
         fc.drawBitmap(rawGlyph, 0f, 0f, null);
@@ -230,8 +295,7 @@ public final class LiquidGlassRuntime {
         c.drawBitmap(frosted, off, off, null);
         frosted.recycle();
 
-        // 3. Crisp anisotropic Fresnel specular rim
-        drawLiveLiquidRim(c, pad, pad, sz - 2f * pad, sz - 2f * pad, 0f, 0f, false, 1.0f);
+        drawLiveLiquidRim(c, pad, pad, sz - 2f * pad, sz - 2f * pad, 0f, 0f, false, 0.95f);
         return out;
     }
 }
