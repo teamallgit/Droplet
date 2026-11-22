@@ -5,11 +5,13 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -111,24 +113,24 @@ public final class LiquidGlassRuntime {
         "    float d512 = dIn * (512.0 / max(minSide, 1.0));\n" +
         "    float2 norm = squircleNormal(p, b, 4.5);\n" +
         "\n" +
-        "    // 1. STRONG REAL CONVEX LENS MAGNIFICATION (~2.4x at iOS 26, ~3.4x at Liquid Syrup, ~1.6x at Subtle!)\n" +
+        "    // 1. STRONG REAL CONVEX LENS MAGNIFICATION (~2.5x at iOS 26, ~3.6x at Liquid Syrup, ~1.65x at Subtle!)\n" +
         "    //    Monotonic optical zoom: pulls background cleanly outward so waves visibly swell & magnify through each icon!\n" +
-        "    float zoomFrac = clamp(0.58 * uStrength, 0.25, 0.74);\n" +
+        "    float zoomFrac = clamp(0.60 * uStrength, 0.28, 0.76);\n" +
         "    float r2 = clamp(dot(p / max(halfSize, float2(1.0)), p / max(halfSize, float2(1.0))), 0.0, 1.4);\n" +
-        "    float2 magOffset = -p * (zoomFrac * (1.0 - 0.15 * r2));\n" +
+        "    float2 magOffset = -p * (zoomFrac * (1.0 - 0.14 * r2));\n" +
         "\n" +
-        "    // 2. CRISP CURVED-EDGE GLASS REFRACTION (outer ~15% only — smooth glowing wrap, ZERO chunky fake frame!)\n" +
-        "    float edgeT = clamp(1.0 - dIn / (minSide * 0.15), 0.0, 1.0);\n" +
-        "    float2 rimBend = norm * (minSide * 0.24 * uStrength * pow(edgeT, 2.0));\n" +
+        "    // 2. CRISP CURVED-EDGE GLASS REFRACTION (outer ~16% — smooth glowing wrap, ZERO chunky fake frame!)\n" +
+        "    float edgeT = clamp(1.0 - dIn / (minSide * 0.16), 0.0, 1.0);\n" +
+        "    float2 rimBend = norm * (minSide * 0.28 * uStrength * pow(edgeT, 1.85));\n" +
         "\n" +
         "    // 3. LIVE GYROSCOPE REFRACTIVE PARALLAX\n" +
-        "    float2 tiltShift = uTilt * (minSide * 0.12 * uStrength);\n" +
+        "    float2 tiltShift = uTilt * (minSide * 0.13 * uStrength);\n" +
         "\n" +
         "    float2 baseScreen = uScreenPos + fragCoord + magOffset + rimBend + tiltShift;\n" +
         "\n" +
-        "    // Silky Apple frosted clarity in interior (~5.5px screen blur) sharpening crisply along the curved edge!\n" +
-        "    float blurR = (1.35 - 0.70 * pow(edgeT, 1.5)) * min(uWallScale.x, uWallScale.y);\n" +
-        "    float dispPx = minSide * 0.025 * uStrength * pow(edgeT, 2.0);\n" +
+        "    // Silky Apple frosted clarity in interior (~5px screen blur) sharpening crisply along the curved edge!\n" +
+        "    float blurR = (1.25 - 0.65 * pow(edgeT, 1.5)) * min(uWallScale.x, uWallScale.y);\n" +
+        "    float dispPx = minSide * 0.030 * uStrength * pow(edgeT, 1.9);\n" +
         "    half rCh = sampleGlassOptical((baseScreen + norm * dispPx) * uWallScale, blurR).r;\n" +
         "    half gCh = sampleGlassOptical(baseScreen * uWallScale, blurR).g;\n" +
         "    half bCh = sampleGlassOptical((baseScreen - norm * dispPx) * uWallScale, blurR).b;\n" +
@@ -137,7 +139,7 @@ public final class LiquidGlassRuntime {
         "    // Vivid optical edge refraction glow (like real iOS 26 pink/cyan/gold glowing rims!) +\n" +
         "    // adaptive bright-wallpaper legibility balance so icons pop cleanly even on bright yellow!\n" +
         "    half luma = dot(col, half3(0.299, 0.587, 0.114));\n" +
-        "    col = mix(half3(luma), col, half(1.05 + 0.22 * pow(edgeT, 1.5)));\n" +
+        "    col = mix(half3(luma), col, half(1.06 + 0.28 * pow(edgeT, 1.5)));\n" +
         "    float brightClamp = smoothstep(0.58, 0.92, float(luma));\n" +
         "    col *= half(1.0 - 0.12 * brightClamp);\n" +
         "\n" +
@@ -269,6 +271,7 @@ public final class LiquidGlassRuntime {
     private static volatile long sLastHomeDrawMs = 0L;
     private static volatile boolean sCaptureLoggedOnce = false;
     private static volatile boolean sCaptureFailedPermanently = false;
+    private static volatile int sConsecutiveFails = 0;
     private static volatile Runnable sFrameInvalidateCb;
     private static volatile Context sAppCtx;
     private static volatile long sFrameCount = 0L;
@@ -320,6 +323,9 @@ public final class LiquidGlassRuntime {
         if (sAppCtx == null && ctx != null) {
             sAppCtx = ctx.getApplicationContext() != null ? ctx.getApplicationContext() : ctx;
         }
+        // Always retry live capture cleanly on resume (recovers automatically if launcher booted while locked!)
+        sCaptureFailedPermanently = false;
+        sConsecutiveFails = 0;
         sLastHomeDrawMs = System.currentTimeMillis();
         kickLiveCaptureIfNeeded();
     }
@@ -516,6 +522,8 @@ public final class LiquidGlassRuntime {
 
             Bitmap frame = captureLiveWallpaperFrame(ctx, sw, sh);
             if (frame != null) {
+                sConsecutiveFails = 0;
+                sCaptureFailedPermanently = false;
                 sWallScaleX = frame.getWidth() / (float) sw;
                 sWallScaleY = frame.getHeight() / (float) sh;
                 sWallpaperShader = new BitmapShader(frame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
@@ -533,11 +541,17 @@ public final class LiquidGlassRuntime {
                     sCapRunning = false;
                 }
             } else if (sWallpaperShader == null) {
-                sCaptureFailedPermanently = true;
-                sCapRunning = false;
-                if (!sCaptureLoggedOnce) {
-                    sCaptureLoggedOnce = true;
-                    XposedBridge.log(TAG + "Wallpaper surface capture unavailable -> falling back to SurfaceFlinger BackgroundBlurDrawable");
+                sConsecutiveFails++;
+                if (sConsecutiveFails < 6 && sCapHandler != null) {
+                    // Transient failure (e.g. phone was locked or transitioning) -> retry smoothly!
+                    sCapHandler.postDelayed(this, 500L);
+                } else {
+                    sCaptureFailedPermanently = true;
+                    sCapRunning = false;
+                    if (!sCaptureLoggedOnce) {
+                        sCaptureLoggedOnce = true;
+                        XposedBridge.log(TAG + "Wallpaper surface capture unavailable -> falling back to SurfaceFlinger BackgroundBlurDrawable");
+                    }
                 }
             } else if (sIsLiveWallpaper && sCapHandler != null) {
                 // Transient empty capture during transition — keep previous valid frame and retry smoothly!
@@ -765,6 +779,14 @@ public final class LiquidGlassRuntime {
         Canvas c = new Canvas(out);
         float expand = w * 0.04f;
         RectF dst = new RectF(-expand, -expand, w + expand, h + expand);
+
+        // Whisper-soft depth shadow so floating frosted glyphs look physically suspended INSIDE the glass!
+        Paint shadowP = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        shadowP.setColorFilter(new PorterDuffColorFilter(Color.argb(38, 6, 14, 28), PorterDuff.Mode.SRC_IN));
+        shadowP.setMaskFilter(new BlurMaskFilter(Math.max(2f, w * 0.018f), BlurMaskFilter.Blur.NORMAL));
+        RectF shDst = new RectF(dst.left, dst.top + w * 0.015f, dst.right, dst.bottom + w * 0.015f);
+        c.drawBitmap(raw, null, shDst, shadowP);
+
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         c.drawBitmap(raw, null, dst, p);
         raw.recycle();
