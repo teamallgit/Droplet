@@ -140,12 +140,15 @@ public final class LiquidGlassRuntime {
         "    float brightClamp = smoothstep(0.58, 0.92, float(luma));\n" +
         "    col *= half(1.0 - 0.11 * brightClamp);\n" +
         "\n" +
-        "    // Live Clear <-> Frosted glass body controlled directly by user's Frost slider (uFrost: 0..1)!\n" +
+        "    // Live Clear (0% = pure crystal glass, ZERO white wash!) <-> Frosted (100% = heavy frosted glass!)\n" +
         "    float edgeMeniscus = exp(-d512 / 16.0);\n" +
         "    float topCatch = pow(clamp((1.0 - pn.y) * 0.5, 0.0, 1.0), 1.15);\n" +
         "    float diag = pow(clamp((-pn.x - pn.y + 0.30) / 2.2, 0.0, 1.0), 2.4);\n" +
-        "    float baseFrost = mix(0.045, 0.34, uFrost) * mix(1.0, 0.72, brightClamp);\n" +
-        "    float bodyAlpha = clamp(baseFrost + (0.035 + 0.04 * uFrost) * topCatch + 0.042 * edgeMeniscus + 0.035 * diag, 0.03, 0.48);\n" +
+        "    float frostCurve = pow(clamp(uFrost, 0.0, 1.0), 1.15);\n" +
+        "    float drawerTintMod = mix(1.0, mix(0.25, 0.90, frostCurve), uDrawerMode);\n" +
+        "    float baseFrost = (0.50 * frostCurve) * mix(1.0, 0.78, brightClamp);\n" +
+        "    float bodyAlpha = (baseFrost + (0.09 * frostCurve) * topCatch + (0.008 + 0.055 * frostCurve) * edgeMeniscus + (0.065 * frostCurve) * diag) * drawerTintMod;\n" +
+        "    bodyAlpha = clamp(bodyAlpha, 0.0, 0.64);\n" +
         "    half3 glassTint = half3(0.985 + 0.015 * diag, 0.992 + 0.008 * diag, 1.0);\n" +
         "    col = mix(col, glassTint, half(bodyAlpha));\n" +
         "\n" +
@@ -183,8 +186,8 @@ public final class LiquidGlassRuntime {
         "    float2 pn = p / max(halfSize, float2(1.0));\n" +
         "    float edgeMeniscus = exp(-d512 / 16.0);\n" +
         "    float topCatch = pow(clamp((1.0 - pn.y) * 0.5, 0.0, 1.0), 1.15);\n" +
-        "    float baseA = mix(0.08, 0.34, uFrost);\n" +
-        "    float outA = clamp(baseA + 0.05 * topCatch + 0.045 * edgeMeniscus, 0.06, 0.46) * mask;\n" +
+        "    float baseA = mix(0.015, 0.52, uFrost);\n" +
+        "    float outA = clamp(baseA + (0.08 * uFrost) * topCatch + (0.012 + 0.05 * uFrost) * edgeMeniscus, 0.01, 0.62) * mask;\n" +
         "    return half4(half3(0.99, 0.995, 1.0) * half(outA), half(outA));\n" +
         "}\n";
 
@@ -390,8 +393,9 @@ public final class LiquidGlassRuntime {
     }
 
     private static int frostToBlurRadius(float frost01) {
-        // Maps user's Clear <-> Frosted slider (0..1) cleanly to 0..8 px in 270x585 (~0..36px smooth blur!)
-        return Math.max(0, Math.min(8, Math.round(frost01 * 8.0f)));
+        // 0% -> 0px (pure crystal-clear glass lens!), 100% -> 14px 2-pass (~85px heavy frosted glass!)
+        if (frost01 <= 0.06f) return 0;
+        return Math.max(1, Math.min(14, Math.round(frost01 * 14.0f)));
     }
 
     private static BitmapShader makeLinearShader(Bitmap bmp) {
@@ -514,7 +518,7 @@ public final class LiquidGlassRuntime {
         int w = sLastRawW, h = sLastRawH;
         int r = frostToBlurRadius(sCurrentFrost);
         sLastBuiltBlurRadius = r;
-        Bitmap homeBmp = buildPreBlurredBitmap(raw, w, h, r, r >= 4 ? 2 : 1, false);
+        Bitmap homeBmp = buildPreBlurredBitmap(raw, w, h, r, r >= 3 ? 2 : 1, false);
         sHomeWallShader = makeLinearShader(homeBmp);
         Runnable cb = sFrameInvalidateCb;
         if (cb != null) cb.run();
@@ -728,7 +732,7 @@ public final class LiquidGlassRuntime {
                 // 1. Pre-blur Home Screen glass texture (270x585 + GPU FILTER_MODE_LINEAR = silky zero-pixelation!)
                 int homeBlurR = frostToBlurRadius(sCurrentFrost);
                 sLastBuiltBlurRadius = homeBlurR;
-                Bitmap homeBmp = buildPreBlurredBitmap(rawPx, w, h, homeBlurR, homeBlurR >= 4 ? 2 : 1, false);
+                Bitmap homeBmp = buildPreBlurredBitmap(rawPx, w, h, homeBlurR, homeBlurR >= 3 ? 2 : 1, false);
                 sHomeWallShader = makeLinearShader(homeBmp);
 
                 // 2. Pre-blur App Drawer texture (90x195 2-pass r=8 + FILTER_MODE_LINEAR = silky ~140px Gaussian!)
