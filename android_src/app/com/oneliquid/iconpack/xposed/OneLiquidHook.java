@@ -444,6 +444,12 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private void hookOneUiHome(ClassLoader cl) {
         XposedBridge.log(TAG + "Hooking One UI Home (" + ModuleStatus.getOneUiVersionName() + ")");
         registerStatusReceiver(cl, ModuleStatus.ACTION_PING_HOME, "launcher", sHomeHooks, true);
+        LiquidGlassRuntime.setFrameInvalidateCallback(new Runnable() {
+            @Override
+            public void run() {
+                invalidateVisibleIcons();
+            }
+        });
 
         Class<?> iconViewCls = XposedHelpers.findClassIfExists("com.honeyspace.ui.common.iconview.IconViewImpl", cl);
         if (iconViewCls != null) {
