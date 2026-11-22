@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -22,14 +23,15 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.BaseAdapter;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -38,7 +40,28 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Clean Samsung One UI 8 / 9 Dark Settings interface for OneLiquid.
+ * - Native One UI black canvas (#000000), 26dp rounded #1C1C1E grouped cards, #3E8BFF One UI Blue accent
+ * - Automatic LSPosed detection: guides setup & grays out root-only controls when inactive
+ * - Master On/Off switch bar, live Clarity/Frost, Magnification, and Corner Glow sliders
+ * - Live module status & one-tap Restart One UI Home / Restart SystemUI
+ */
 public class MainActivity extends Activity {
+
+    // Samsung One UI Dark palette
+    private static final int COL_BG = Color.parseColor("#000000");
+    private static final int COL_CARD = Color.parseColor("#1C1C1E");
+    private static final int COL_CARD_SUBTLE = Color.parseColor("#141416");
+    private static final int COL_DIVIDER = Color.parseColor("#2A2A2E");
+    private static final int COL_ACCENT = Color.parseColor("#3E8BFF");
+    private static final int COL_MASTER_ON = Color.parseColor("#1C3454");
+    private static final int COL_MASTER_OFF = Color.parseColor("#242428");
+    private static final int COL_TEXT_PRI = Color.parseColor("#F5F5F7");
+    private static final int COL_TEXT_SEC = Color.parseColor("#9898A0");
+    private static final int COL_GREEN = Color.parseColor("#34D399");
+    private static final int COL_AMBER = Color.parseColor("#FBBF24");
+    private static final int COL_MUTED = Color.parseColor("#63636A");
 
     private String[] allIcons = new String[0];
     private final List<String> filtered = new ArrayList<>();
@@ -46,29 +69,815 @@ public class MainActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private SharedPreferences prefs;
-    private TextView statusPill;
-    private LinearLayout checklistContainer;
     private View tabLsposedView;
     private View tabIconsView;
     private Button tabBtnLsposed;
     private Button tabBtnIcons;
 
+    // LSPosed state-bound controls (grayed out automatically when LSPosed is inactive or Master is Off)
+    private LinearLayout masterBar;
+    private TextView masterLabel;
+    private Switch masterSwitch;
+    private LinearLayout setupGuideCard;
+    private LinearLayout slidersCard;
+    private LinearLayout togglesCard;
+    private final List<View> lsposedControls = new ArrayList<>();
+    private LinearLayout statusListContainer;
+    private Button restartHomeBtn;
+    private Button restartSysUiBtn;
+
     private volatile boolean homeScopeResponded = false;
-    private volatile int homeHookCount = 0;
     private volatile boolean sysUiScopeResponded = false;
-    private volatile int sysUiHookCount = 0;
+    private volatile boolean rootAvailable = false;
     private BroadcastReceiver pongReceiver;
 
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
-    private GradientDrawable cardBg(int fillColor, int strokeColor, int radiusDp) {
+    private GradientDrawable roundedBg(int fillColor, int radiusDp) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(fillColor);
+        d.setCornerRadius(dp(radiusDp));
+        return d;
+    }
+
+    private GradientDrawable roundedStrokeBg(int fillColor, int strokeColor, int radiusDp) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(fillColor);
         d.setCornerRadius(dp(radiusDp));
         d.setStroke(dp(1), strokeColor);
         return d;
+    }
+
+    private View makeDivider() {
+        View v = new View(this);
+        v.setBackgroundColor(COL_DIVIDER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1);
+        lp.leftMargin = dp(20);
+        lp.rightMargin = dp(20);
+        v.setLayoutParams(lp);
+        return v;
+    }
+
+    private TextView makeSectionHeader(String title) {
+        TextView tv = new TextView(this);
+        tv.setText(title);
+        tv.setTextColor(COL_TEXT_SEC);
+        tv.setTextSize(13f);
+        tv.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        tv.setPadding(dp(20), dp(14), dp(20), dp(8));
+        return tv;
+    }
+
+    private void styleSwitch(Switch sw) {
+        if (Build.VERSION.SDK_INT >= 23) {
+            int[][] states = new int[][] {
+                new int[] { android.R.attr.state_checked },
+                new int[] {}
+            };
+            sw.setThumbTintList(new ColorStateList(states, new int[] { Color.WHITE, Color.parseColor("#E5E5EA") }));
+            sw.setTrackTintList(new ColorStateList(states, new int[] { COL_ACCENT, Color.parseColor("#48484D") }));
+        }
+    }
+
+    private void styleSeekBar(SeekBar sb) {
+        if (Build.VERSION.SDK_INT >= 21) {
+            sb.setProgressTintList(ColorStateList.valueOf(COL_ACCENT));
+            sb.setThumbTintList(ColorStateList.valueOf(Color.WHITE));
+            sb.setProgressBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#38383D")));
+        }
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        prefs = ModuleStatus.getPrefs(this);
+        // Clean one-time migration from legacy v2.4.0 prefs (which had removed widget/live_refraction keys)
+        if (prefs.contains("opt_glass_widgets")) {
+            prefs.edit()
+                    .remove("opt_glass_widgets")
+                    .putBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true)
+                    .putBoolean(ModuleStatus.KEY_LIQUID_ICONS, true)
+                    .putBoolean(ModuleStatus.KEY_LIVE_REFRACTION, true)
+                    .putBoolean(ModuleStatus.KEY_GYRO_TILT, true)
+                    .putBoolean(ModuleStatus.KEY_GLASS_FOLDERS, true)
+                    .putBoolean(ModuleStatus.KEY_SYSTEMUI_GLASS, true)
+                    .putInt(ModuleStatus.KEY_FROST_AMOUNT, 28)
+                    .putInt(ModuleStatus.KEY_MAG_AMOUNT, 62)
+                    .putInt(ModuleStatus.KEY_GLOW_AMOUNT, 78)
+                    .commit();
+        }
+
+        // Clean One UI edge-to-edge black system bars
+        try {
+            Window w = getWindow();
+            w.setStatusBarColor(COL_BG);
+            w.setNavigationBarColor(COL_BG);
+        } catch (Throwable ignored) {}
+
+        int arrId = getResources().getIdentifier("icon_pack", "array", getPackageName());
+        if (arrId != 0) allIcons = getResources().getStringArray(arrId);
+
+        pongReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null) return;
+                String target = intent.getStringExtra("target");
+                if ("launcher".equals(target)) homeScopeResponded = true;
+                else if ("systemui".equals(target)) sysUiScopeResponded = true;
+            }
+        };
+        IntentFilter pongFilter = new IntentFilter(ModuleStatus.ACTION_PONG);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(pongReceiver, pongFilter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(pongReceiver, pongFilter);
+        }
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(COL_BG);
+        root.setPadding(dp(12), dp(44), dp(12), dp(12));
+
+        // --- Spacious Samsung One UI Header ---
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(10), dp(6), dp(10), dp(14));
+
+        ImageView logoView = new ImageView(this);
+        int logoId = getResources().getIdentifier("ic_oneliquid_launcher", "drawable", getPackageName());
+        if (logoId == 0) logoId = getResources().getIdentifier("ic_launcher", "mipmap", getPackageName());
+        if (logoId != 0) logoView.setImageResource(logoId);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        logoLp.rightMargin = dp(12);
+        header.addView(logoView, logoLp);
+
+        LinearLayout titleCol = new LinearLayout(this);
+        titleCol.setOrientation(LinearLayout.VERTICAL);
+        TextView title = new TextView(this);
+        title.setText("OneLiquid");
+        title.setTextColor(COL_TEXT_PRI);
+        title.setTextSize(26f);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        titleCol.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText(ModuleStatus.getOneUiVersionName() + "  •  v" + ModuleStatus.getModuleVersion());
+        subtitle.setTextColor(COL_TEXT_SEC);
+        subtitle.setTextSize(13f);
+        titleCol.addView(subtitle);
+        header.addView(titleCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        root.addView(header);
+
+        // --- Clean Two-Tab One UI Pill Bar ---
+        LinearLayout tabBar = new LinearLayout(this);
+        tabBar.setOrientation(LinearLayout.HORIZONTAL);
+        tabBar.setBackground(roundedBg(COL_CARD, 22));
+        tabBar.setPadding(dp(4), dp(4), dp(4), dp(4));
+
+        tabBtnLsposed = makePillTab("Liquid Glass");
+        tabBtnIcons = makePillTab("Icons (" + allIcons.length + ")");
+        tabBtnLsposed.setOnClickListener(v -> selectTab(0));
+        tabBtnIcons.setOnClickListener(v -> selectTab(1));
+        tabBar.addView(tabBtnLsposed, new LinearLayout.LayoutParams(0, dp(38), 1f));
+        tabBar.addView(tabBtnIcons, new LinearLayout.LayoutParams(0, dp(38), 1f));
+
+        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tabLp.bottomMargin = dp(12);
+        root.addView(tabBar, tabLp);
+
+        // --- Tab Content ---
+        tabLsposedView = buildSettingsTab();
+        tabIconsView = buildIconsTab();
+        root.addView(tabLsposedView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(tabIconsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        setContentView(root);
+        selectTab(0);
+        applyLsposedInteractivityState();
+        runStatusChecks();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        applyLsposedInteractivityState();
+        runStatusChecks();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        try { if (pongReceiver != null) unregisterReceiver(pongReceiver); } catch (Throwable ignored) {}
+        ioPool.shutdownNow();
+    }
+
+    private Button makePillTab(String text) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setAllCaps(false);
+        b.setTextSize(14f);
+        b.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        b.setStateListAnimator(null);
+        b.setPadding(dp(8), 0, dp(8), 0);
+        return b;
+    }
+
+    private void selectTab(int idx) {
+        boolean isSettings = (idx == 0);
+        tabLsposedView.setVisibility(isSettings ? View.VISIBLE : View.GONE);
+        tabIconsView.setVisibility(isSettings ? View.GONE : View.VISIBLE);
+
+        tabBtnLsposed.setBackground(isSettings ? roundedBg(Color.parseColor("#2E2E33"), 18) : roundedBg(Color.TRANSPARENT, 18));
+        tabBtnLsposed.setTextColor(isSettings ? COL_TEXT_PRI : COL_TEXT_SEC);
+
+        tabBtnIcons.setBackground(!isSettings ? roundedBg(Color.parseColor("#2E2E33"), 18) : roundedBg(Color.TRANSPARENT, 18));
+        tabBtnIcons.setTextColor(!isSettings ? COL_TEXT_PRI : COL_TEXT_SEC);
+    }
+
+    private void notifyHooksPrefsChanged() {
+        try {
+            boolean enabled = prefs.getBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true);
+            boolean liquidIcons = prefs.getBoolean(ModuleStatus.KEY_LIQUID_ICONS, true);
+            boolean gyro = prefs.getBoolean(ModuleStatus.KEY_GYRO_TILT, true);
+            boolean folders = prefs.getBoolean(ModuleStatus.KEY_GLASS_FOLDERS, true);
+            boolean sysui = prefs.getBoolean(ModuleStatus.KEY_SYSTEMUI_GLASS, true);
+            int frost = prefs.getInt(ModuleStatus.KEY_FROST_AMOUNT, 28);
+            int mag = prefs.getInt(ModuleStatus.KEY_MAG_AMOUNT, 62);
+            int glow = prefs.getInt(ModuleStatus.KEY_GLOW_AMOUNT, 78);
+
+            for (String pkg : new String[] { ModuleStatus.PKG_ONEUI_HOME, ModuleStatus.PKG_SYSTEMUI }) {
+                Intent i = new Intent(ModuleStatus.ACTION_RELOAD_PREFS);
+                i.setPackage(pkg);
+                i.putExtra(ModuleStatus.KEY_LSPOSED_ENABLED, enabled);
+                i.putExtra(ModuleStatus.KEY_LIQUID_ICONS, liquidIcons);
+                i.putExtra(ModuleStatus.KEY_LIVE_REFRACTION, liquidIcons);
+                i.putExtra(ModuleStatus.KEY_GYRO_TILT, gyro);
+                i.putExtra(ModuleStatus.KEY_GLASS_FOLDERS, folders);
+                i.putExtra(ModuleStatus.KEY_SYSTEMUI_GLASS, sysui);
+                i.putExtra(ModuleStatus.KEY_FROST_AMOUNT, frost);
+                i.putExtra(ModuleStatus.KEY_MAG_AMOUNT, mag);
+                i.putExtra(ModuleStatus.KEY_GLOW_AMOUNT, glow);
+                sendBroadcast(i);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void applyLsposedInteractivityState() {
+        boolean moduleActive = ModuleStatus.isModuleActive();
+        boolean masterOn = prefs.getBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true);
+        boolean controlsEnabled = moduleActive && masterOn;
+
+        // Guide user clearly when LSPosed module is not enabled; hide when active!
+        if (setupGuideCard != null) {
+            setupGuideCard.setVisibility(moduleActive ? View.GONE : View.VISIBLE);
+        }
+        if (masterBar != null) {
+            masterBar.setBackground(roundedBg(controlsEnabled ? COL_MASTER_ON : COL_MASTER_OFF, 26));
+            masterBar.setAlpha(moduleActive ? 1.0f : 0.45f);
+        }
+        if (masterSwitch != null) {
+            masterSwitch.setEnabled(moduleActive);
+        }
+        if (masterLabel != null) {
+            masterLabel.setText(moduleActive ? (masterOn ? "On" : "Off") : "Off (LSPosed required)");
+            masterLabel.setTextColor(controlsEnabled ? COL_TEXT_PRI : COL_TEXT_SEC);
+        }
+        if (slidersCard != null) slidersCard.setAlpha(controlsEnabled ? 1.0f : 0.42f);
+        if (togglesCard != null) togglesCard.setAlpha(controlsEnabled ? 1.0f : 0.42f);
+
+        for (View v : lsposedControls) {
+            v.setEnabled(controlsEnabled);
+        }
+    }
+
+    private View buildSettingsTab() {
+        ScrollView sv = new ScrollView(this);
+        sv.setVerticalScrollBarEnabled(false);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+
+        // --- 1. Setup Guide Card (only visible when LSPosed module is NOT active) ---
+        setupGuideCard = new LinearLayout(this);
+        setupGuideCard.setOrientation(LinearLayout.VERTICAL);
+        setupGuideCard.setBackground(roundedStrokeBg(COL_CARD, Color.parseColor("#3E8BFF"), 26));
+        setupGuideCard.setPadding(dp(20), dp(18), dp(20), dp(18));
+
+        TextView guideTitle = new TextView(this);
+        guideTitle.setText("Enable in LSPosed to customize glass effects");
+        guideTitle.setTextColor(COL_TEXT_PRI);
+        guideTitle.setTextSize(15.5f);
+        guideTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        setupGuideCard.addView(guideTitle);
+
+        TextView guideSteps = new TextView(this);
+        guideSteps.setText(
+                "Live magnification, clarity sliders, and refracting glass require root + LSPosed. "
+                        + "Without root, you can still apply all " + allIcons.length + " static icons from the Icons tab.\n\n"
+                        + "1. Open LSPosed Manager → Modules → OneLiquid\n"
+                        + "2. Turn it on and select One UI Home & SystemUI\n"
+                        + "3. Restart One UI Home below");
+        guideSteps.setTextColor(COL_TEXT_SEC);
+        guideSteps.setTextSize(13f);
+        guideSteps.setLineSpacing(dp(2), 1.1f);
+        guideSteps.setPadding(0, dp(8), 0, dp(12));
+        setupGuideCard.addView(guideSteps);
+
+        Button recheckGuideBtn = makeOneUiPillButton("Check again", Color.parseColor("#2B3B52"), COL_TEXT_PRI);
+        recheckGuideBtn.setOnClickListener(v -> {
+            applyLsposedInteractivityState();
+            runStatusChecks();
+        });
+        setupGuideCard.addView(recheckGuideBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)));
+
+        LinearLayout.LayoutParams guideLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        guideLp.bottomMargin = dp(12);
+        content.addView(setupGuideCard, guideLp);
+
+        // --- 2. One UI Master On/Off Switch Bar ---
+        masterBar = new LinearLayout(this);
+        masterBar.setOrientation(LinearLayout.HORIZONTAL);
+        masterBar.setGravity(Gravity.CENTER_VERTICAL);
+        masterBar.setPadding(dp(22), dp(16), dp(18), dp(16));
+
+        masterLabel = new TextView(this);
+        masterLabel.setTextSize(17.5f);
+        masterLabel.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        masterBar.addView(masterLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        masterSwitch = new Switch(this);
+        masterSwitch.setChecked(prefs.getBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true));
+        styleSwitch(masterSwitch);
+        masterSwitch.setOnCheckedChangeListener((btn, isChecked) -> {
+            prefs.edit().putBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, isChecked).commit();
+            notifyHooksPrefsChanged();
+            applyLsposedInteractivityState();
+        });
+        masterBar.addView(masterSwitch);
+        masterBar.setOnClickListener(v -> {
+            if (masterSwitch.isEnabled()) masterSwitch.toggle();
+        });
+
+        LinearLayout.LayoutParams masterLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        masterLp.bottomMargin = dp(8);
+        content.addView(masterBar, masterLp);
+
+        // --- 3. Glass Appearance Sliders Card ---
+        content.addView(makeSectionHeader("Glass appearance"));
+        slidersCard = new LinearLayout(this);
+        slidersCard.setOrientation(LinearLayout.VERTICAL);
+        slidersCard.setBackground(roundedBg(COL_CARD, 26));
+        slidersCard.setPadding(0, dp(6), 0, dp(6));
+
+        slidersCard.addView(makeSliderRow(
+                "Clarity & frost",
+                "Clear liquid",
+                "Frosted",
+                ModuleStatus.KEY_FROST_AMOUNT,
+                28));
+        slidersCard.addView(makeDivider());
+        slidersCard.addView(makeSliderRow(
+                "Magnification & refraction",
+                "Subtle",
+                "Strong",
+                ModuleStatus.KEY_MAG_AMOUNT,
+                62));
+        slidersCard.addView(makeDivider());
+        slidersCard.addView(makeSliderRow(
+                "Corner light glow",
+                "Off",
+                "Bright",
+                ModuleStatus.KEY_GLOW_AMOUNT,
+                78));
+
+        content.addView(slidersCard, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // --- 4. Simplified Effects Toggles Card ---
+        content.addView(makeSectionHeader("Effects"));
+        togglesCard = new LinearLayout(this);
+        togglesCard.setOrientation(LinearLayout.VERTICAL);
+        togglesCard.setBackground(roundedBg(COL_CARD, 26));
+        togglesCard.setPadding(0, dp(4), 0, dp(4));
+
+        togglesCard.addView(makeToggleRow(
+                "Liquid Glass icons",
+                "Floating frosted glyphs with live glass lens",
+                ModuleStatus.KEY_LIQUID_ICONS, true));
+        togglesCard.addView(makeDivider());
+        togglesCard.addView(makeToggleRow(
+                "Gyroscope tilt glow",
+                "Corner specular highlights react as you tilt",
+                ModuleStatus.KEY_GYRO_TILT, true));
+        togglesCard.addView(makeDivider());
+        togglesCard.addView(makeToggleRow(
+                "Glass folders",
+                "Apply Liquid Glass to Home Screen folders",
+                ModuleStatus.KEY_GLASS_FOLDERS, true));
+        togglesCard.addView(makeDivider());
+        togglesCard.addView(makeToggleRow(
+                "SystemUI glass rims",
+                "Subtle specular rims on Quick Settings & notifications",
+                ModuleStatus.KEY_SYSTEMUI_GLASS, true));
+
+        content.addView(togglesCard, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // --- 5. Module Status & Restart Card ---
+        LinearLayout statusHdrRow = new LinearLayout(this);
+        statusHdrRow.setOrientation(LinearLayout.HORIZONTAL);
+        statusHdrRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusHdrRow.addView(makeSectionHeader("LSPosed status"),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView recheckLink = new TextView(this);
+        recheckLink.setText("Refresh");
+        recheckLink.setTextColor(COL_ACCENT);
+        recheckLink.setTextSize(13f);
+        recheckLink.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        recheckLink.setPadding(dp(16), dp(14), dp(20), dp(8));
+        recheckLink.setOnClickListener(v -> runStatusChecks());
+        statusHdrRow.addView(recheckLink);
+        content.addView(statusHdrRow);
+
+        LinearLayout statusCard = new LinearLayout(this);
+        statusCard.setOrientation(LinearLayout.VERTICAL);
+        statusCard.setBackground(roundedBg(COL_CARD, 26));
+        statusCard.setPadding(dp(20), dp(14), dp(20), dp(16));
+
+        statusListContainer = new LinearLayout(this);
+        statusListContainer.setOrientation(LinearLayout.VERTICAL);
+        statusCard.addView(statusListContainer);
+
+        // Restart One UI Home & Restart SystemUI pill buttons
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding(0, dp(14), 0, 0);
+
+        restartHomeBtn = makeOneUiPillButton("Restart Home", Color.parseColor("#2A2A30"), COL_TEXT_PRI);
+        restartHomeBtn.setOnClickListener(v -> confirmAndRestart("One UI Home", "killall com.sec.android.app.launcher || am force-stop com.sec.android.app.launcher"));
+
+        restartSysUiBtn = makeOneUiPillButton("Restart SystemUI", COL_ACCENT, Color.WHITE);
+        restartSysUiBtn.setOnClickListener(v -> confirmAndRestart("SystemUI", "killall com.android.systemui || pkill -f com.android.systemui"));
+
+        LinearLayout.LayoutParams b1Lp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        b1Lp.rightMargin = dp(8);
+        btnRow.addView(restartHomeBtn, b1Lp);
+        btnRow.addView(restartSysUiBtn, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        statusCard.addView(btnRow);
+
+        LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stLp.bottomMargin = dp(18);
+        content.addView(statusCard, stLp);
+
+        sv.addView(content);
+        return sv;
+    }
+
+    private Button makeOneUiPillButton(String label, int bgColor, int textColor) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextSize(14f);
+        b.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        b.setTextColor(textColor);
+        b.setBackground(roundedBg(bgColor, 22));
+        b.setStateListAnimator(null);
+        b.setPadding(dp(16), 0, dp(16), 0);
+        return b;
+    }
+
+    private View makeSliderRow(String titleText, String leftHint, String rightHint, String prefKey, int defVal) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(20), dp(14), dp(20), dp(14));
+
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText(titleText);
+        title.setTextColor(COL_TEXT_PRI);
+        title.setTextSize(15.5f);
+        topRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        int curVal = prefs.getInt(prefKey, defVal);
+        TextView valLbl = new TextView(this);
+        valLbl.setText(curVal + "%");
+        valLbl.setTextColor(COL_ACCENT);
+        valLbl.setTextSize(14f);
+        valLbl.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        topRow.addView(valLbl);
+        wrap.addView(topRow);
+
+        SeekBar sb = new SeekBar(this);
+        sb.setMax(100);
+        sb.setProgress(curVal);
+        sb.setPadding(dp(6), dp(10), dp(6), dp(4));
+        styleSeekBar(sb);
+        lsposedControls.add(sb);
+
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                valLbl.setText(progress + "%");
+                if (fromUser) {
+                    prefs.edit().putInt(prefKey, progress).apply();
+                    notifyHooksPrefsChanged();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.edit().putInt(prefKey, seekBar.getProgress()).commit();
+                notifyHooksPrefsChanged();
+            }
+        });
+        wrap.addView(sb, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout hints = new LinearLayout(this);
+        hints.setOrientation(LinearLayout.HORIZONTAL);
+        TextView lh = new TextView(this);
+        lh.setText(leftHint);
+        lh.setTextColor(COL_TEXT_SEC);
+        lh.setTextSize(11.5f);
+        hints.addView(lh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView rh = new TextView(this);
+        rh.setText(rightHint);
+        rh.setTextColor(COL_TEXT_SEC);
+        rh.setTextSize(11.5f);
+        hints.addView(rh);
+        wrap.addView(hints);
+
+        return wrap;
+    }
+
+    private View makeToggleRow(String titleText, String subText, String prefKey, boolean defVal) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(20), dp(14), dp(16), dp(14));
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+
+        TextView t = new TextView(this);
+        t.setText(titleText);
+        t.setTextColor(COL_TEXT_PRI);
+        t.setTextSize(15.5f);
+        col.addView(t);
+
+        TextView s = new TextView(this);
+        s.setText(subText);
+        s.setTextColor(COL_TEXT_SEC);
+        s.setTextSize(12.5f);
+        s.setPadding(0, dp(2), dp(12), 0);
+        col.addView(s);
+
+        row.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Switch sw = new Switch(this);
+        sw.setChecked(prefs.getBoolean(prefKey, defVal));
+        styleSwitch(sw);
+        lsposedControls.add(sw);
+        sw.setOnCheckedChangeListener((btn, isChecked) -> {
+            SharedPreferences.Editor ed = prefs.edit().putBoolean(prefKey, isChecked);
+            if (ModuleStatus.KEY_LIQUID_ICONS.equals(prefKey)) {
+                ed.putBoolean(ModuleStatus.KEY_LIVE_REFRACTION, isChecked);
+            }
+            ed.commit();
+            notifyHooksPrefsChanged();
+        });
+        row.addView(sw);
+        row.setOnClickListener(v -> {
+            if (sw.isEnabled()) sw.toggle();
+        });
+        return row;
+    }
+
+    private void addStatusRow(String label, String value, int dotColor) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+
+        View dot = new View(this);
+        dot.setBackground(roundedBg(dotColor, 5));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(8), dp(8));
+        dotLp.rightMargin = dp(10);
+        row.addView(dot, dotLp);
+
+        TextView lbl = new TextView(this);
+        lbl.setText(label);
+        lbl.setTextColor(COL_TEXT_PRI);
+        lbl.setTextSize(14f);
+        row.addView(lbl, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView val = new TextView(this);
+        val.setText(value);
+        val.setTextColor(COL_TEXT_SEC);
+        val.setTextSize(13f);
+        row.addView(val);
+
+        statusListContainer.addView(row);
+    }
+
+    private void runStatusChecks() {
+        homeScopeResponded = false;
+        sysUiScopeResponded = false;
+        statusListContainer.removeAllViews();
+        addStatusRow("Checking status...", "", COL_MUTED);
+
+        try {
+            Intent p1 = new Intent(ModuleStatus.ACTION_PING_HOME);
+            p1.setPackage(ModuleStatus.PKG_ONEUI_HOME);
+            sendBroadcast(p1);
+            Intent p2 = new Intent(ModuleStatus.ACTION_PING_SYSUI);
+            p2.setPackage(ModuleStatus.PKG_SYSTEMUI);
+            sendBroadcast(p2);
+        } catch (Throwable ignored) {}
+
+        ioPool.execute(() -> {
+            final boolean hasRoot = ModuleStatus.checkRootAvailable();
+            rootAvailable = hasRoot;
+            try { Thread.sleep(400); } catch (InterruptedException ignored) {}
+
+            ui.post(() -> {
+                statusListContainer.removeAllViews();
+                boolean modActive = ModuleStatus.isModuleActive();
+                boolean homeOk = homeScopeResponded;
+                boolean sysUiOk = sysUiScopeResponded;
+
+                addStatusRow("LSPosed module",
+                        modActive ? "Active" : "Not enabled",
+                        modActive ? COL_GREEN : COL_AMBER);
+                addStatusRow("One UI Home",
+                        homeOk ? "Connected" : (modActive ? "Restart Home" : "Inactive"),
+                        homeOk ? COL_GREEN : (modActive ? COL_AMBER : COL_MUTED));
+                addStatusRow("SystemUI",
+                        sysUiOk ? "Connected" : (modActive ? "Restart SystemUI" : "Inactive"),
+                        sysUiOk ? COL_GREEN : (modActive ? COL_AMBER : COL_MUTED));
+                addStatusRow("Root access",
+                        hasRoot ? "Available" : "Unavailable",
+                        hasRoot ? COL_GREEN : COL_MUTED);
+
+                restartHomeBtn.setEnabled(hasRoot);
+                restartHomeBtn.setAlpha(hasRoot ? 1.0f : 0.42f);
+                restartSysUiBtn.setEnabled(hasRoot);
+                restartSysUiBtn.setAlpha(hasRoot ? 1.0f : 0.42f);
+                applyLsposedInteractivityState();
+            });
+        });
+    }
+
+    private void confirmAndRestart(String targetLabel, String rootCmd) {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Restart " + targetLabel + "?")
+                .setMessage("Your screen will briefly reload to apply changes.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Restart", (d, w) -> {
+                    Toast.makeText(this, "Restarting " + targetLabel + "...", Toast.LENGTH_SHORT).show();
+                    ioPool.execute(() -> {
+                        boolean ok = ModuleStatus.runRootCommand(rootCmd);
+                        ui.post(() -> {
+                            if (ok) {
+                                ui.postDelayed(this::runStatusChecks, 1600);
+                            } else {
+                                Toast.makeText(this, "Root permission denied", Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    });
+                })
+                .show();
+    }
+
+    // --- Icons Tab (No-Root Theme Park & Icon Browser) ---
+    private View buildIconsTab() {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+
+        // Apply Card (No Root)
+        LinearLayout applyCard = new LinearLayout(this);
+        applyCard.setOrientation(LinearLayout.HORIZONTAL);
+        applyCard.setGravity(Gravity.CENTER_VERTICAL);
+        applyCard.setBackground(roundedBg(COL_CARD, 24));
+        applyCard.setPadding(dp(18), dp(14), dp(14), dp(14));
+
+        LinearLayout infoCol = new LinearLayout(this);
+        infoCol.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(this);
+        t.setText("Theme Park (No Root)");
+        t.setTextColor(COL_TEXT_PRI);
+        t.setTextSize(15f);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        infoCol.addView(t);
+
+        TextView s = new TextView(this);
+        s.setText("Apply all " + allIcons.length + " static glass icons");
+        s.setTextColor(COL_TEXT_SEC);
+        s.setTextSize(12.5f);
+        infoCol.addView(s);
+        applyCard.addView(infoCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button applyBtn = makeOneUiPillButton("Apply", COL_ACCENT, Color.WHITE);
+        applyBtn.setOnClickListener(v -> openThemeParkOrLauncher());
+        applyCard.addView(applyBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)));
+
+        LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        aLp.bottomMargin = dp(10);
+        wrap.addView(applyCard, aLp);
+
+        // Clean One UI Search Bar
+        EditText search = new EditText(this);
+        search.setHint("Search icons");
+        search.setHintTextColor(COL_TEXT_SEC);
+        search.setTextColor(COL_TEXT_PRI);
+        search.setSingleLine(true);
+        search.setTextSize(14.5f);
+        search.setPadding(dp(18), dp(11), dp(18), dp(11));
+        search.setBackground(roundedBg(COL_CARD, 22));
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        searchLp.bottomMargin = dp(10);
+        wrap.addView(search, searchLp);
+
+        for (String name : allIcons) filtered.add(name);
+
+        GridView grid = new GridView(this);
+        grid.setNumColumns(4);
+        grid.setHorizontalSpacing(dp(10));
+        grid.setVerticalSpacing(dp(14));
+        grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
+        grid.setBackground(roundedBg(COL_CARD_SUBTLE, 24));
+        grid.setPadding(dp(12), dp(14), dp(12), dp(14));
+        grid.setClipToPadding(false);
+
+        final BaseAdapter adapter = new BaseAdapter() {
+            @Override public int getCount() { return filtered.size(); }
+            @Override public Object getItem(int pos) { return filtered.get(pos); }
+            @Override public long getItemId(int pos) { return pos; }
+
+            @Override
+            public View getView(int pos, View convertView, ViewGroup parent) {
+                LinearLayout cell;
+                ImageView iv;
+                TextView tv;
+                if (convertView instanceof LinearLayout) {
+                    cell = (LinearLayout) convertView;
+                    iv = (ImageView) cell.getChildAt(0);
+                    tv = (TextView) cell.getChildAt(1);
+                } else {
+                    cell = new LinearLayout(MainActivity.this);
+                    cell.setOrientation(LinearLayout.VERTICAL);
+                    cell.setGravity(Gravity.CENTER_HORIZONTAL);
+                    iv = new ImageView(MainActivity.this);
+                    iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    cell.addView(iv, new LinearLayout.LayoutParams(dp(58), dp(58)));
+                    tv = new TextView(MainActivity.this);
+                    tv.setTextColor(COL_TEXT_SEC);
+                    tv.setTextSize(11f);
+                    tv.setGravity(Gravity.CENTER);
+                    tv.setSingleLine(true);
+                    tv.setPadding(0, dp(4), 0, 0);
+                    cell.addView(tv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                }
+                String name = filtered.get(pos);
+                int id = getResources().getIdentifier(name, "drawable", getPackageName());
+                if (id != 0) iv.setImageResource(id);
+                else iv.setImageDrawable(null);
+
+                String pretty = name.replaceFirst("^(ios_|ic_|si_)", "").replace("_", " ");
+                tv.setText(pretty.length() > 12 ? pretty.substring(0, 12) + "…" : pretty);
+                return cell;
+            }
+        };
+        grid.setAdapter(adapter);
+
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String q = s.toString().trim().toLowerCase();
+                filtered.clear();
+                for (String name : allIcons) {
+                    if (q.isEmpty() || name.toLowerCase().contains(q)) filtered.add(name);
+                }
+                adapter.notifyDataSetChanged();
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+
+        wrap.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        return wrap;
     }
 
     private String getDefaultLauncherPackage() {
@@ -101,707 +910,33 @@ public class MainActivity extends Activity {
                 startActivity(i);
                 return true;
             }
-            if ("com.actionlauncher.playstore".equals(launcherPkg)) {
-                Intent i = getPackageManager().getLaunchIntentForPackage(launcherPkg);
-                if (i != null) {
-                    i.putExtra("apply_icon_pack", pkg);
-                    startActivity(i);
-                    return true;
-                }
-            }
-            if ("org.adw.launcher".equals(launcherPkg)) {
-                Intent i = new Intent("org.adw.launcher.SET_THEME");
-                i.putExtra("org.adw.launcher.theme.NAME", pkg);
-                startActivity(i);
-                return true;
-            }
         } catch (Throwable ignored) {}
         return false;
     }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        prefs = ModuleStatus.getPrefs(this);
+    private void openThemeParkOrLauncher() {
+        String launcher = getDefaultLauncherPackage();
+        if (tryDirectApply(launcher)) return;
 
-        // Load icon_pack string-array dynamically from resources
-        int arrId = getResources().getIdentifier("icon_pack", "array", getPackageName());
-        if (arrId != 0) {
-            allIcons = getResources().getStringArray(arrId);
+        Intent tp = getPackageManager().getLaunchIntentForPackage(ModuleStatus.PKG_THEME_PARK);
+        if (tp != null) {
+            tp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            Toast.makeText(this, "Theme Park → Icon → Create New → Iconpack → OneLiquid", Toast.LENGTH_LONG).show();
+            startActivity(tp);
+            return;
         }
-
-        // Register receiver for live LSPosed scope PONG responses from One UI Home & SystemUI
-        pongReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (intent == null) return;
-                String target = intent.getStringExtra("target");
-                int hooks = intent.getIntExtra("hooks", 0);
-                if ("launcher".equals(target)) {
-                    homeScopeResponded = true;
-                    homeHookCount = hooks;
-                } else if ("systemui".equals(target)) {
-                    sysUiScopeResponded = true;
-                    sysUiHookCount = hooks;
-                }
-            }
-        };
-        IntentFilter pongFilter = new IntentFilter(ModuleStatus.ACTION_PONG);
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(pongReceiver, pongFilter, Context.RECEIVER_EXPORTED);
-        } else {
-            registerReceiver(pongReceiver, pongFilter);
-        }
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#0D1829"));
-        root.setPadding(dp(16), dp(46), dp(16), dp(14));
-
-        // --- Header row: OneLiquid Liquid Glass Logo right next to Title & Live Status Pill ---
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-
-        ImageView logo = new ImageView(this);
-        int logoRes = getResources().getIdentifier("ic_oneliquid_launcher", "drawable", getPackageName());
-        if (logoRes != 0) logo.setImageResource(logoRes);
-        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(56), dp(56));
-        logoLp.rightMargin = dp(12);
-        header.addView(logo, logoLp);
-
-        LinearLayout titleCol = new LinearLayout(this);
-        titleCol.setOrientation(LinearLayout.VERTICAL);
-
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView title = new TextView(this);
-        title.setText("OneLiquid");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(26);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        titleRow.addView(title);
-
-        statusPill = new TextView(this);
-        statusPill.setTextSize(10.5f);
-        statusPill.setTypeface(Typeface.DEFAULT_BOLD);
-        statusPill.setPadding(dp(8), dp(3), dp(8), dp(3));
-        LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        pillLp.leftMargin = dp(10);
-        titleRow.addView(statusPill, pillLp);
-        titleCol.addView(titleRow);
-
-        TextView badge = new TextView(this);
-        badge.setText(ModuleStatus.getOneUiVersionName() + " • " + allIcons.length + " Icons • v" + ModuleStatus.getModuleVersion());
-        badge.setTextColor(Color.parseColor("#96B2D4"));
-        badge.setTextSize(12f);
-        titleCol.addView(badge);
-
-        header.addView(titleCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        headerLp.bottomMargin = dp(12);
-        root.addView(header, headerLp);
-
-        // --- 2-Tab Bar: [ LSPosed Module ] | [ Icons & Theme Park ] ---
-        LinearLayout tabBar = new LinearLayout(this);
-        tabBar.setOrientation(LinearLayout.HORIZONTAL);
-        tabBar.setBackground(cardBg(Color.parseColor("#1AFFFFFF"), Color.parseColor("#33FFFFFF"), 14));
-        tabBar.setPadding(dp(4), dp(4), dp(4), dp(4));
-
-        tabBtnLsposed = makeTabButton("LSPosed Module");
-        tabBtnIcons = makeTabButton("Icons (" + allIcons.length + ")");
-        tabBar.addView(tabBtnLsposed, new LinearLayout.LayoutParams(0, dp(38), 1f));
-        tabBar.addView(tabBtnIcons, new LinearLayout.LayoutParams(0, dp(38), 1f));
-        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        tabLp.bottomMargin = dp(12);
-        root.addView(tabBar, tabLp);
-
-        // --- Tab Content Views ---
-        tabLsposedView = buildLsposedTab();
-        tabIconsView = buildIconsTab();
-
-        root.addView(tabLsposedView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(tabIconsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        tabBtnLsposed.setOnClickListener(v -> selectTab(0));
-        tabBtnIcons.setOnClickListener(v -> selectTab(1));
-
-        selectTab(0);
-        setContentView(root);
-        updateHeaderStatusPill();
-        runAllStatusChecks();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        try {
-            if (pongReceiver != null) unregisterReceiver(pongReceiver);
-        } catch (Throwable ignored) {}
-        ioPool.shutdownNow();
-    }
-
-    private Button makeTabButton(String label) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setAllCaps(false);
-        b.setTextSize(13f);
-        b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setPadding(dp(8), 0, dp(8), 0);
-        return b;
-    }
-
-    private void selectTab(int idx) {
-        boolean isLsp = (idx == 0);
-        tabLsposedView.setVisibility(isLsp ? View.VISIBLE : View.GONE);
-        tabIconsView.setVisibility(isLsp ? View.GONE : View.VISIBLE);
-
-        tabBtnLsposed.setBackground(isLsp
-                ? cardBg(Color.parseColor("#4474C8FF"), Color.parseColor("#88A8DEFF"), 11)
-                : cardBg(Color.TRANSPARENT, Color.TRANSPARENT, 11));
-        tabBtnLsposed.setTextColor(isLsp ? Color.WHITE : Color.parseColor("#9EB5D2"));
-
-        tabBtnIcons.setBackground(!isLsp
-                ? cardBg(Color.parseColor("#4474C8FF"), Color.parseColor("#88A8DEFF"), 11)
-                : cardBg(Color.TRANSPARENT, Color.TRANSPARENT, 11));
-        tabBtnIcons.setTextColor(!isLsp ? Color.WHITE : Color.parseColor("#9EB5D2"));
-    }
-
-    private void updateHeaderStatusPill() {
-        boolean active = ModuleStatus.isModuleActive();
-        boolean enabled = prefs.getBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true);
-        if (active && enabled) {
-            statusPill.setText("LSPosed Active");
-            statusPill.setTextColor(Color.parseColor("#B8FFD6"));
-            statusPill.setBackground(cardBg(Color.parseColor("#3322C55E"), Color.parseColor("#8822C55E"), 10));
-        } else if (active) {
-            statusPill.setText("LSPosed Paused");
-            statusPill.setTextColor(Color.parseColor("#FFE4A3"));
-            statusPill.setBackground(cardBg(Color.parseColor("#33F59E0B"), Color.parseColor("#88F59E0B"), 10));
-        } else {
-            statusPill.setText("Theme Park Mode");
-            statusPill.setTextColor(Color.parseColor("#B8DCFF"));
-            statusPill.setBackground(cardBg(Color.parseColor("#3338BDF8"), Color.parseColor("#8838BDF8"), 10));
-        }
-    }
-
-    private void notifyHooksPrefsChanged() {
-        try {
-            Intent i1 = new Intent(ModuleStatus.ACTION_RELOAD_PREFS);
-            i1.setPackage(ModuleStatus.PKG_ONEUI_HOME);
-            sendBroadcast(i1);
-            Intent i2 = new Intent(ModuleStatus.ACTION_RELOAD_PREFS);
-            i2.setPackage(ModuleStatus.PKG_SYSTEMUI);
-            sendBroadcast(i2);
-        } catch (Throwable ignored) {}
-    }
-
-    private View buildLsposedTab() {
-        ScrollView sv = new ScrollView(this);
-        sv.setVerticalScrollBarEnabled(false);
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-
-        // --- 1. Master LSPosed Toggle Card ---
-        LinearLayout masterCard = new LinearLayout(this);
-        masterCard.setOrientation(LinearLayout.VERTICAL);
-        masterCard.setBackground(cardBg(Color.parseColor("#243A5E99"), Color.parseColor("#5578B8FF"), 18));
-        masterCard.setPadding(dp(16), dp(14), dp(16), dp(14));
-
-        masterCard.addView(makeSwitchRow(
-                "Enable OneLiquid LSPosed Module",
-                "Activates 1:1 iOS 26 Clear Liquid Glass hooks on One UI 8 / 8.5 / 9+",
-                ModuleStatus.KEY_LSPOSED_ENABLED,
-                true,
-                true
-        ));
-        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardLp.bottomMargin = dp(12);
-        content.addView(masterCard, cardLp);
-
-        // --- 2. Feature Toggles Card ---
-        LinearLayout featCard = new LinearLayout(this);
-        featCard.setOrientation(LinearLayout.VERTICAL);
-        featCard.setBackground(cardBg(Color.parseColor("#18FFFFFF"), Color.parseColor("#30FFFFFF"), 18));
-        featCard.setPadding(dp(16), dp(14), dp(16), dp(10));
-
-        TextView featHdr = new TextView(this);
-        featHdr.setText("LIQUID GLASS MODULES (ONE UI 8 / 8.5 / 9)");
-        featHdr.setTextColor(Color.parseColor("#8AC4FF"));
-        featHdr.setTextSize(11f);
-        featHdr.setTypeface(Typeface.DEFAULT_BOLD);
-        featHdr.setPadding(0, 0, 0, dp(8));
-        featCard.addView(featHdr);
-
-        featCard.addView(makeSwitchRow(
-                "1:1 iOS 26 Clear Icons",
-                "Pure frosted glyphs floating inside live refracting glass droplets",
-                ModuleStatus.KEY_LIQUID_ICONS, true, false));
-        featCard.addView(makeSwitchRow(
-                "Live Liquid Syrup Refraction & Magnification",
-                "120fps GPU AGSL Snell's-law edge warp, convex lens bulge & RGB dispersion",
-                ModuleStatus.KEY_LIVE_REFRACTION, true, false));
-        featCard.addView(makeSwitchRow(
-                "Gyroscope Tilt Specular Glint",
-                "Wet liquid caustics & parallax glide smoothly as you tilt your phone",
-                ModuleStatus.KEY_GYRO_TILT, true, false));
-        featCard.addView(makeSwitchRow(
-                "iOS 26 Liquid Glass Folders",
-                "Live refracting continuous-squircle glass folders on Home Screen",
-                ModuleStatus.KEY_GLASS_FOLDERS, true, false));
-        featCard.addView(makeSwitchRow(
-                "SystemUI Glass Polish",
-                "Subtle Liquid Glass specular rims on QS tiles & notification cards",
-                ModuleStatus.KEY_SYSTEMUI_GLASS, true, false));
-
-        // 3-way Liquid Refraction Strength selector (Subtle / iOS 26 / Liquid Syrup)
-        TextView strLbl = new TextView(this);
-        strLbl.setText("REFRACTION & MAGNIFICATION STRENGTH");
-        strLbl.setTextColor(Color.parseColor("#8AC4FF"));
-        strLbl.setTextSize(10.5f);
-        strLbl.setTypeface(Typeface.DEFAULT_BOLD);
-        strLbl.setPadding(0, dp(10), 0, dp(6));
-        featCard.addView(strLbl);
-
-        LinearLayout segRow = new LinearLayout(this);
-        segRow.setOrientation(LinearLayout.HORIZONTAL);
-        segRow.setBackground(cardBg(Color.parseColor("#18FFFFFF"), Color.parseColor("#33FFFFFF"), 12));
-        segRow.setPadding(dp(3), dp(3), dp(3), dp(3));
-
-        final String[] levelNames = new String[] { "Subtle", "iOS 26", "Liquid Syrup" };
-        final Button[] levelBtns = new Button[3];
-        final Runnable styleLevels = () -> {
-            int cur = prefs.getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 1);
-            for (int k = 0; k < 3; k++) {
-                boolean sel = (k == cur);
-                levelBtns[k].setBackground(sel
-                        ? cardBg(Color.parseColor("#5574C8FF"), Color.parseColor("#99B8E6FF"), 9)
-                        : cardBg(Color.TRANSPARENT, Color.TRANSPARENT, 9));
-                levelBtns[k].setTextColor(sel ? Color.WHITE : Color.parseColor("#9EB5D2"));
-            }
-        };
-        for (int k = 0; k < 3; k++) {
-            final int lvl = k;
-            Button lb = makeTabButton(levelNames[k]);
-            lb.setTextSize(12f);
-            lb.setOnClickListener(v -> {
-                prefs.edit().putInt(ModuleStatus.KEY_REFRACTION_LEVEL, lvl).apply();
-                styleLevels.run();
-                notifyHooksPrefsChanged();
-                Toast.makeText(this, "Refraction set to " + levelNames[lvl], Toast.LENGTH_SHORT).show();
-            });
-            levelBtns[k] = lb;
-            segRow.addView(lb, new LinearLayout.LayoutParams(0, dp(34), 1f));
-        }
-        styleLevels.run();
-        LinearLayout.LayoutParams segLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        segLp.bottomMargin = dp(6);
-        featCard.addView(segRow, segLp);
-
-        LinearLayout.LayoutParams featLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        featLp.bottomMargin = dp(12);
-        content.addView(featCard, featLp);
-
-        // --- 3. Setup Checklist & Live Status Checks Card ---
-        LinearLayout checkCard = new LinearLayout(this);
-        checkCard.setOrientation(LinearLayout.VERTICAL);
-        checkCard.setBackground(cardBg(Color.parseColor("#18FFFFFF"), Color.parseColor("#30FFFFFF"), 18));
-        checkCard.setPadding(dp(16), dp(14), dp(16), dp(12));
-
-        LinearLayout checkHdrRow = new LinearLayout(this);
-        checkHdrRow.setOrientation(LinearLayout.HORIZONTAL);
-        checkHdrRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView checkHdr = new TextView(this);
-        checkHdr.setText("LSPOSED CHECKLIST & LIVE STATUS");
-        checkHdr.setTextColor(Color.parseColor("#8AC4FF"));
-        checkHdr.setTextSize(11f);
-        checkHdr.setTypeface(Typeface.DEFAULT_BOLD);
-        checkHdrRow.addView(checkHdr, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button recheckBtn = new Button(this);
-        recheckBtn.setText("Recheck");
-        recheckBtn.setAllCaps(false);
-        recheckBtn.setTextSize(11.5f);
-        recheckBtn.setTextColor(Color.WHITE);
-        recheckBtn.setBackground(cardBg(Color.parseColor("#2EFFFFFF"), Color.parseColor("#55FFFFFF"), 10));
-        recheckBtn.setPadding(dp(10), 0, dp(10), 0);
-        recheckBtn.setOnClickListener(v -> runAllStatusChecks());
-        checkHdrRow.addView(recheckBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(30)));
-        checkCard.addView(checkHdrRow);
-
-        checklistContainer = new LinearLayout(this);
-        checklistContainer.setOrientation(LinearLayout.VERTICAL);
-        checklistContainer.setPadding(0, dp(8), 0, 0);
-        checkCard.addView(checklistContainer);
-
-        LinearLayout.LayoutParams checkLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        checkLp.bottomMargin = dp(12);
-        content.addView(checkCard, checkLp);
-
-        // --- 4. Restart SystemUI & One UI Home Controls ---
-        LinearLayout actionsRow = new LinearLayout(this);
-        actionsRow.setOrientation(LinearLayout.HORIZONTAL);
-
-        Button restartSysUiBtn = new Button(this);
-        restartSysUiBtn.setText("Restart SystemUI");
-        restartSysUiBtn.setAllCaps(false);
-        restartSysUiBtn.setTextSize(13.5f);
-        restartSysUiBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        restartSysUiBtn.setTextColor(Color.WHITE);
-        restartSysUiBtn.setBackground(cardBg(Color.parseColor("#44EF4444"), Color.parseColor("#99F87171"), 14));
-        restartSysUiBtn.setOnClickListener(v -> confirmRestartSystemUi());
-
-        Button restartHomeBtn = new Button(this);
-        restartHomeBtn.setText("Restart One UI Home");
-        restartHomeBtn.setAllCaps(false);
-        restartHomeBtn.setTextSize(13.5f);
-        restartHomeBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        restartHomeBtn.setTextColor(Color.WHITE);
-        restartHomeBtn.setBackground(cardBg(Color.parseColor("#3838BDF8"), Color.parseColor("#887DD3FC"), 14));
-        restartHomeBtn.setOnClickListener(v -> restartOneUiHome());
-
-        LinearLayout.LayoutParams b1Lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
-        b1Lp.rightMargin = dp(8);
-        LinearLayout.LayoutParams b2Lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
-        actionsRow.addView(restartSysUiBtn, b1Lp);
-        actionsRow.addView(restartHomeBtn, b2Lp);
-
-        LinearLayout.LayoutParams actLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        actLp.bottomMargin = dp(14);
-        content.addView(actionsRow, actLp);
-
-        // Quick setup guide note
-        TextView tip = new TextView(this);
-        tip.setText("Setup Checklist: In LSPosed Manager -> Modules -> enable OneLiquid -> tick One UI Home (com.sec.android.app.launcher) & SystemUI (com.android.systemui) -> tap Restart One UI Home & Restart SystemUI above.");
-        tip.setTextColor(Color.parseColor("#8AA4C4"));
-        tip.setTextSize(11.5f);
-        tip.setPadding(dp(4), 0, dp(4), dp(12));
-        content.addView(tip);
-
-        sv.addView(content);
-        return sv;
-    }
-
-    private View makeSwitchRow(String titleText, String descText, final String prefKey, boolean defVal, final boolean isMaster) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(6));
-
-        LinearLayout textCol = new LinearLayout(this);
-        textCol.setOrientation(LinearLayout.VERTICAL);
-
-        TextView t = new TextView(this);
-        t.setText(titleText);
-        t.setTextColor(Color.WHITE);
-        t.setTextSize(isMaster ? 15.5f : 14f);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        textCol.addView(t);
-
-        TextView d = new TextView(this);
-        d.setText(descText);
-        d.setTextColor(Color.parseColor("#A4BCD8"));
-        d.setTextSize(11.5f);
-        textCol.addView(d);
-
-        row.addView(textCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Switch sw = new Switch(this);
-        sw.setChecked(prefs.getBoolean(prefKey, defVal));
-        sw.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> {
-            prefs.edit().putBoolean(prefKey, isChecked).apply();
-            notifyHooksPrefsChanged();
-            if (isMaster) updateHeaderStatusPill();
-            Toast.makeText(this,
-                    titleText + (isChecked ? " enabled" : " disabled") + " — restart One UI Home / SystemUI to apply",
-                    Toast.LENGTH_SHORT).show();
-        });
-        row.addView(sw);
-        return row;
-    }
-
-    private void addChecklistRow(String title, String detail, int state) {
-        // state: 2 = PASS (green), 1 = WARN/ACTION (amber), 0 = FAIL (red)
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(6));
-
-        TextView icon = new TextView(this);
-        icon.setGravity(Gravity.CENTER);
-        icon.setTypeface(Typeface.DEFAULT_BOLD);
-        icon.setTextSize(11f);
-        if (state == 2) {
-            icon.setText("✓");
-            icon.setTextColor(Color.parseColor("#86EFAC"));
-            icon.setBackground(cardBg(Color.parseColor("#3322C55E"), Color.parseColor("#8822C55E"), 12));
-        } else if (state == 1) {
-            icon.setText("!");
-            icon.setTextColor(Color.parseColor("#FDE68A"));
-            icon.setBackground(cardBg(Color.parseColor("#33F59E0B"), Color.parseColor("#88F59E0B"), 12));
-        } else {
-            icon.setText("✕");
-            icon.setTextColor(Color.parseColor("#FCA5A5"));
-            icon.setBackground(cardBg(Color.parseColor("#33EF4444"), Color.parseColor("#88EF4444"), 12));
-        }
-        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(24), dp(24));
-        iconLp.rightMargin = dp(10);
-        row.addView(icon, iconLp);
-
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-
-        TextView t = new TextView(this);
-        t.setText(title);
-        t.setTextColor(Color.WHITE);
-        t.setTextSize(13.5f);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        col.addView(t);
-
-        TextView d = new TextView(this);
-        d.setText(detail);
-        d.setTextColor(Color.parseColor("#9FB8D6"));
-        d.setTextSize(11.5f);
-        col.addView(d);
-
-        row.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        TextView badge = new TextView(this);
-        badge.setText(state == 2 ? "OK" : (state == 1 ? "ACTION" : "OFF"));
-        badge.setTextSize(10f);
-        badge.setTypeface(Typeface.DEFAULT_BOLD);
-        badge.setTextColor(state == 2 ? Color.parseColor("#86EFAC")
-                : (state == 1 ? Color.parseColor("#FDE68A") : Color.parseColor("#FCA5A5")));
-        row.addView(badge);
-
-        checklistContainer.addView(row);
-    }
-
-    private void runAllStatusChecks() {
-        homeScopeResponded = false;
-        homeHookCount = 0;
-        sysUiScopeResponded = false;
-        sysUiHookCount = 0;
-
-        checklistContainer.removeAllViews();
-        TextView loading = new TextView(this);
-        loading.setText("Running live LSPosed & One UI checks...");
-        loading.setTextColor(Color.parseColor("#9FB8D6"));
-        loading.setTextSize(12.5f);
-        loading.setPadding(0, dp(8), 0, dp(8));
-        checklistContainer.addView(loading);
-
-        // Send live IPC pings to hooked One UI Home & SystemUI processes
-        try {
-            Intent p1 = new Intent(ModuleStatus.ACTION_PING_HOME);
-            p1.setPackage(ModuleStatus.PKG_ONEUI_HOME);
-            sendBroadcast(p1);
-
-            Intent p2 = new Intent(ModuleStatus.ACTION_PING_SYSUI);
-            p2.setPackage(ModuleStatus.PKG_SYSTEMUI);
-            sendBroadcast(p2);
-        } catch (Throwable ignored) {}
-
-        ioPool.execute(() -> {
-            final boolean oneUiOk = ModuleStatus.isOneUiSupported();
-            final String oneUiVer = ModuleStatus.getOneUiVersionName() + " (code " + ModuleStatus.getOneUiVersionInt() + ")";
-            final boolean hasRoot = ModuleStatus.checkRootAvailable();
-            final boolean modActive = ModuleStatus.isModuleActive();
-            final boolean prefsWorld = ModuleStatus.isPrefsWorldReadable(this);
-            final boolean homeInstalled = ModuleStatus.isPackageInstalled(this, ModuleStatus.PKG_ONEUI_HOME);
-            final boolean sysUiInstalled = ModuleStatus.isPackageInstalled(this, ModuleStatus.PKG_SYSTEMUI);
-
-            // Allow 380ms for PONG broadcasts from One UI Home & SystemUI
-            try { Thread.sleep(380); } catch (InterruptedException ignored) {}
-
-            ui.post(() -> {
-                updateHeaderStatusPill();
-                checklistContainer.removeAllViews();
-
-                addChecklistRow(
-                        "1. One UI Compatibility (8 / 8.5 / 9+)",
-                        oneUiOk ? oneUiVer + " — fully supported" : oneUiVer + " — One UI 8+ recommended",
-                        oneUiOk ? 2 : 1
-                );
-                addChecklistRow(
-                        "2. Root Access (KernelSU / Magisk)",
-                        hasRoot ? "Root granted (required for Restart SystemUI / Home)" : "Not granted — grant root to enable SystemUI restart",
-                        hasRoot ? 2 : 1
-                );
-                addChecklistRow(
-                        "3. LSPosed Module Hook Active",
-                        modActive ? "OneLiquidHook loaded & active in LSPosed" : "Not active — enable OneLiquid in LSPosed Manager",
-                        modActive ? 2 : 0
-                );
-                addChecklistRow(
-                        "4. Scope: One UI Home",
-                        homeScopeResponded
-                                ? "Hooked live (" + homeHookCount + " HoneySpace hooks active)"
-                                : (homeInstalled ? "Enable com.sec.android.app.launcher in LSPosed & restart Home" : "One UI Home not detected"),
-                        homeScopeResponded ? 2 : (modActive ? 1 : 0)
-                );
-                addChecklistRow(
-                        "5. Scope: SystemUI",
-                        sysUiScopeResponded
-                                ? "Hooked live (" + sysUiHookCount + " SystemUI hooks active)"
-                                : (sysUiInstalled ? "Enable com.android.systemui in LSPosed & restart SystemUI" : "SystemUI not detected"),
-                        sysUiScopeResponded ? 2 : (modActive ? 1 : 0)
-                );
-                addChecklistRow(
-                        "6. XSharedPreferences Sync",
-                        prefsWorld ? "MODE_WORLD_READABLE active (toggles sync live)" : "Waiting for LSPosed xposedsharedprefs activation",
-                        prefsWorld ? 2 : (modActive ? 1 : 0)
-                );
-            });
-        });
-    }
-
-    private void confirmRestartSystemUi() {
-        new AlertDialog.Builder(this)
-                .setTitle("Restart SystemUI?")
-                .setMessage("This briefly reloads the status bar, lock screen, and notification shade to apply OneLiquid LSPosed changes.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Restart SystemUI", (dlg, which) -> {
-                    Toast.makeText(this, "Restarting SystemUI...", Toast.LENGTH_SHORT).show();
-                    ioPool.execute(() -> {
-                        boolean ok = ModuleStatus.runRootCommand(
-                                "pkill -f com.android.systemui || killall com.android.systemui");
-                        ui.post(() -> {
-                            if (!ok) {
-                                Toast.makeText(this, "Root access required to restart SystemUI", Toast.LENGTH_LONG).show();
-                            }
-                        });
-                    });
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Theme Park required")
+                .setMessage("Install Good Lock & Theme Park from the Galaxy Store to apply icons without root.")
+                .setPositiveButton("Open Galaxy Store", (d, w) -> {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse("samsungapps://ProductDetail/com.samsung.android.themedesigner")));
+                    } catch (Throwable t) {
+                        Toast.makeText(this, "Search 'Theme Park' in Galaxy Store", Toast.LENGTH_LONG).show();
+                    }
                 })
+                .setNegativeButton("Cancel", null)
                 .show();
-    }
-
-    private void restartOneUiHome() {
-        Toast.makeText(this, "Restarting One UI Home...", Toast.LENGTH_SHORT).show();
-        ioPool.execute(() -> {
-            boolean ok = ModuleStatus.runRootCommand("am force-stop com.sec.android.app.launcher");
-            ui.post(() -> {
-                if (ok) {
-                    Toast.makeText(this, "One UI Home restarted — hooks reloaded!", Toast.LENGTH_SHORT).show();
-                    ui.postDelayed(this::runAllStatusChecks, 900);
-                } else {
-                    Toast.makeText(this, "Root access required to restart One UI Home", Toast.LENGTH_LONG).show();
-                }
-            });
-        });
-    }
-
-    private View buildIconsTab() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-
-        String launcherPkg = getDefaultLauncherPackage();
-        boolean supportsDirect = "com.teslacoilsw.launcher".equals(launcherPkg)
-                || launcherPkg.startsWith("ginlemon.flower")
-                || "com.anddoes.launcher".equals(launcherPkg)
-                || "com.actionlauncher.playstore".equals(launcherPkg)
-                || "org.adw.launcher".equals(launcherPkg);
-
-        TextView sub = new TextView(this);
-        sub.setText(supportsDirect
-                ? "Tap below to apply OneLiquid directly to your launcher (no root required)."
-                : "No-root Theme Park mode: Theme Park -> Icon -> Create New -> Iconpack -> Third Party -> OneLiquid (keep Shape original & Effects None).");
-        sub.setTextColor(Color.parseColor("#B8CCE4"));
-        sub.setTextSize(12f);
-        sub.setPadding(0, 0, 0, dp(10));
-        box.addView(sub);
-
-        Button btn = new Button(this);
-        btn.setText(supportsDirect ? "Apply OneLiquid Now" : "Apply via Theme Park (No Root)");
-        btn.setTextColor(Color.WHITE);
-        btn.setAllCaps(false);
-        btn.setTextSize(14.5f);
-        btn.setTypeface(Typeface.DEFAULT_BOLD);
-        btn.setBackground(cardBg(Color.parseColor("#33FFFFFF"), Color.parseColor("#88FFFFFF"), 14));
-        btn.setOnClickListener(v -> {
-            if (supportsDirect && tryDirectApply(launcherPkg)) return;
-            Intent tp = getPackageManager().getLaunchIntentForPackage(ModuleStatus.PKG_THEME_PARK);
-            if (tp != null) {
-                startActivity(tp);
-            } else {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW,
-                            Uri.parse("samsungapps://ProductDetail/" + ModuleStatus.PKG_THEME_PARK)));
-                } catch (Throwable t) {
-                    Toast.makeText(this, "Install Good Lock -> Theme Park from Galaxy Store", Toast.LENGTH_LONG).show();
-                }
-            }
-        });
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
-        btnLp.bottomMargin = dp(10);
-        box.addView(btn, btnLp);
-
-        filtered.clear();
-        for (String ic : allIcons) filtered.add(ic);
-
-        EditText search = new EditText(this);
-        search.setHint("Search " + allIcons.length + " icons (e.g. netflix, steam, paypal)...");
-        search.setHintTextColor(Color.parseColor("#8FA4BE"));
-        search.setTextColor(Color.WHITE);
-        search.setTextSize(13.5f);
-        search.setSingleLine(true);
-        search.setPadding(dp(14), dp(10), dp(14), dp(10));
-        search.setBackground(cardBg(Color.parseColor("#1FFFFFFF"), Color.parseColor("#44FFFFFF"), 14));
-        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        searchLp.bottomMargin = dp(12);
-        box.addView(search, searchLp);
-
-        GridView grid = new GridView(this);
-        grid.setNumColumns(4);
-        grid.setHorizontalSpacing(dp(12));
-        grid.setVerticalSpacing(dp(14));
-        BaseAdapter adapter = new BaseAdapter() {
-            @Override public int getCount() { return filtered.size(); }
-            @Override public Object getItem(int pos) { return filtered.get(pos); }
-            @Override public long getItemId(int pos) { return pos; }
-            @Override
-            public View getView(int pos, View convertView, ViewGroup parent) {
-                ImageView iv = (convertView instanceof ImageView)
-                        ? (ImageView) convertView : new ImageView(MainActivity.this);
-                int sz = dp(72);
-                iv.setLayoutParams(new GridView.LayoutParams(sz, sz));
-                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                int resId = getResources().getIdentifier(filtered.get(pos), "drawable", getPackageName());
-                if (resId != 0) iv.setImageResource(resId);
-                return iv;
-            }
-        };
-        grid.setAdapter(adapter);
-
-        search.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String q = s.toString().trim().toLowerCase().replace(" ", "_");
-                filtered.clear();
-                for (String ic : allIcons) {
-                    if (q.isEmpty() || ic.toLowerCase().contains(q)) filtered.add(ic);
-                }
-                adapter.notifyDataSetChanged();
-            }
-            @Override public void afterTextChanged(Editable s) {}
-        });
-
-        box.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        return box;
     }
 }

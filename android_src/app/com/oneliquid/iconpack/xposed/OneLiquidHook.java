@@ -21,6 +21,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
 import com.oneliquid.iconpack.ModuleStatus;
@@ -62,10 +63,23 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     private static final Map<String, Bitmap> sFullIconCache = new ConcurrentHashMap<>();
     private static final Set<View> sActiveIcons = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<View, long[]> sLastIconPos = new WeakHashMap<>();
+    private static final Map<View, Boolean> sDrawerIconCache = new WeakHashMap<>();
     private static final Set<View> sHookedRoots = Collections.newSetFromMap(new WeakHashMap<>());
     private static final AtomicInteger sHomeHooks = new AtomicInteger(0);
     private static final AtomicInteger sSysUiHooks = new AtomicInteger(0);
     private static final ThreadLocal<Boolean> sInSetIcon = new ThreadLocal<>();
+
+    // Cached preferences (zero stat()/disk syscalls during onDraw or onPreDraw!)
+    private static volatile boolean sPrefsInit = false;
+    private static volatile boolean sCachedEnabled = true;
+    private static volatile boolean sCachedLiquidIcons = true;
+    private static volatile boolean sCachedLiveRefraction = true;
+    private static volatile boolean sCachedGyroTilt = true;
+    private static volatile boolean sCachedGlassFolders = true;
+    private static volatile boolean sCachedSysUiGlass = true;
+    private static volatile float sCachedFrost = 0.28f;
+    private static volatile float sCachedMagStrength = 1.05f;
+    private static volatile float sCachedCornerGlow = 0.90f;
 
     // Live smoothed gyroscope/gravity tilt vector in [-1..1]
     private static volatile float sTiltX = 0f;
@@ -82,27 +96,105 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
         return sPrefs;
     }
 
+    private static void syncPrefCache() {
+        try {
+            XSharedPreferences p = prefs();
+            sCachedEnabled = p.getBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true);
+            sCachedLiquidIcons = p.getBoolean(ModuleStatus.KEY_LIQUID_ICONS, true);
+            sCachedLiveRefraction = p.getBoolean(ModuleStatus.KEY_LIVE_REFRACTION, true);
+            sCachedGyroTilt = p.getBoolean(ModuleStatus.KEY_GYRO_TILT, true);
+            sCachedGlassFolders = p.getBoolean(ModuleStatus.KEY_GLASS_FOLDERS, true);
+            sCachedSysUiGlass = p.getBoolean(ModuleStatus.KEY_SYSTEMUI_GLASS, true);
+
+            int frostPct = p.getInt(ModuleStatus.KEY_FROST_AMOUNT, 28);
+            sCachedFrost = Math.max(0f, Math.min(1f, frostPct / 100f));
+
+            int magPct = p.getInt(ModuleStatus.KEY_MAG_AMOUNT, -1);
+            if (magPct >= 0) {
+                sCachedMagStrength = 0.20f + (Math.max(0, Math.min(100, magPct)) / 100f) * 1.35f;
+            } else {
+                int lvl = p.getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 1);
+                sCachedMagStrength = (lvl == 0) ? 0.65f : ((lvl == 1) ? 1.05f : 1.45f);
+            }
+
+            int glowPct = p.getInt(ModuleStatus.KEY_GLOW_AMOUNT, 78);
+            sCachedCornerGlow = (Math.max(0, Math.min(100, glowPct)) / 100f) * 1.15f;
+            LiquidGlassRuntime.setFrostLevel(sCachedFrost);
+            sPrefsInit = true;
+        } catch (Throwable ignored) {}
+    }
+
+    private static void applyPrefsFromIntent(Intent intent) {
+        if (intent == null) return;
+        try {
+            if (intent.hasExtra(ModuleStatus.KEY_LSPOSED_ENABLED)) {
+                sCachedEnabled = intent.getBooleanExtra(ModuleStatus.KEY_LSPOSED_ENABLED, sCachedEnabled);
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_LIQUID_ICONS)) {
+                sCachedLiquidIcons = intent.getBooleanExtra(ModuleStatus.KEY_LIQUID_ICONS, sCachedLiquidIcons);
+                sCachedLiveRefraction = sCachedLiquidIcons;
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_GYRO_TILT)) {
+                sCachedGyroTilt = intent.getBooleanExtra(ModuleStatus.KEY_GYRO_TILT, sCachedGyroTilt);
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_GLASS_FOLDERS)) {
+                sCachedGlassFolders = intent.getBooleanExtra(ModuleStatus.KEY_GLASS_FOLDERS, sCachedGlassFolders);
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_SYSTEMUI_GLASS)) {
+                sCachedSysUiGlass = intent.getBooleanExtra(ModuleStatus.KEY_SYSTEMUI_GLASS, sCachedSysUiGlass);
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_FROST_AMOUNT)) {
+                int frostPct = intent.getIntExtra(ModuleStatus.KEY_FROST_AMOUNT, 28);
+                sCachedFrost = Math.max(0f, Math.min(1f, frostPct / 100f));
+                LiquidGlassRuntime.setFrostLevel(sCachedFrost);
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_MAG_AMOUNT)) {
+                int magPct = intent.getIntExtra(ModuleStatus.KEY_MAG_AMOUNT, 62);
+                sCachedMagStrength = 0.20f + (Math.max(0, Math.min(100, magPct)) / 100f) * 1.35f;
+            }
+            if (intent.hasExtra(ModuleStatus.KEY_GLOW_AMOUNT)) {
+                int glowPct = intent.getIntExtra(ModuleStatus.KEY_GLOW_AMOUNT, 78);
+                sCachedCornerGlow = (Math.max(0, Math.min(100, glowPct)) / 100f) * 1.15f;
+            }
+            sPrefsInit = true;
+        } catch (Throwable ignored) {}
+    }
+
     private static void reloadPrefs() {
         try {
             prefs().reload();
+            syncPrefCache();
         } catch (Throwable ignored) {}
     }
 
     private static boolean isEnabled() {
-        XSharedPreferences p = prefs();
-        if (p.hasFileChanged()) p.reload();
-        return p.getBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true);
+        if (!sPrefsInit) syncPrefCache();
+        return sCachedEnabled;
     }
 
     private static boolean opt(String key, boolean def) {
-        return prefs().getBoolean(key, def);
+        if (!sPrefsInit) syncPrefCache();
+        if (ModuleStatus.KEY_LIQUID_ICONS.equals(key)) return sCachedLiquidIcons;
+        if (ModuleStatus.KEY_LIVE_REFRACTION.equals(key)) return sCachedLiveRefraction;
+        if (ModuleStatus.KEY_GYRO_TILT.equals(key)) return sCachedGyroTilt;
+        if (ModuleStatus.KEY_GLASS_FOLDERS.equals(key)) return sCachedGlassFolders;
+        if (ModuleStatus.KEY_SYSTEMUI_GLASS.equals(key)) return sCachedSysUiGlass;
+        return def;
     }
 
     private static float getRefractionStrength() {
-        int lvl = prefs().getInt(ModuleStatus.KEY_REFRACTION_LEVEL, 1); // Default: iOS 26 Balanced (authentic Apple!)
-        if (lvl == 0) return 0.65f;      // Subtle
-        if (lvl == 1) return 1.00f;      // iOS 26 Authentic
-        return 1.45f;                    // Liquid Syrup (Strong Refraction)
+        if (!sPrefsInit) syncPrefCache();
+        return sCachedMagStrength;
+    }
+
+    private static float getFrostLevel() {
+        if (!sPrefsInit) syncPrefCache();
+        return sCachedFrost;
+    }
+
+    private static float getCornerGlowIntensity() {
+        if (!sPrefsInit) syncPrefCache();
+        return sCachedCornerGlow;
     }
 
     @Override
@@ -158,17 +250,11 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                     sTiltX = sTiltX * 0.78f + gx * 0.22f;
                     sTiltY = sTiltY * 0.78f + gy * 0.22f;
 
-                    // Only invalidate visible home icons when tilt actually moves (zero idle battery drain!)
-                    if (Math.abs(sTiltX - sLastNotifiedTiltX) > 0.018f || Math.abs(sTiltY - sLastNotifiedTiltY) > 0.018f) {
+                    // Only invalidate visible on-screen icons when tilt actually moves (zero idle battery drain!)
+                    if (Math.abs(sTiltX - sLastNotifiedTiltX) > 0.024f || Math.abs(sTiltY - sLastNotifiedTiltY) > 0.024f) {
                         sLastNotifiedTiltX = sTiltX;
                         sLastNotifiedTiltY = sTiltY;
-                        synchronized (sActiveIcons) {
-                            for (View v : sActiveIcons) {
-                                if (v != null && v.isShown() && v.isAttachedToWindow()) {
-                                    v.postInvalidateOnAnimation();
-                                }
-                            }
-                        }
+                        invalidateVisibleIcons();
                     }
                 }
                 @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
@@ -204,8 +290,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                                     invalidateVisibleIcons();
                                 } else if (ModuleStatus.ACTION_RELOAD_PREFS.equals(act)) {
                                     reloadPrefs();
-                                    sPureGlyphCache.clear();
-                                    sFullIconCache.clear();
+                                    applyPrefsFromIntent(intent);
                                     invalidateVisibleIcons();
                                 } else if (pingAction.equals(act)) {
                                     reloadPrefs();
@@ -234,6 +319,43 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
         }
     }
 
+    /**
+     * Detects whether an IconViewImpl lives inside One UI's blurred App Drawer, Open Folder,
+     * Overlay Apps, or Suggested Apps container (cached once per View -> O(1) at draw time!).
+     */
+    private static boolean isInBlurredContainer(View v) {
+        if (v == null) return false;
+        Boolean cached = sDrawerIconCache.get(v);
+        if (cached != null) return cached;
+        boolean blurred = false;
+        ViewParent p = v.getParent();
+        int depth = 0;
+        while (p != null && depth < 7) {
+            String cn = p.getClass().getName().toLowerCase(Locale.ROOT);
+            if (cn.contains("applist") || cn.contains("appscreen") || cn.contains("overlayapps")
+                    || cn.contains("openfolder") || cn.contains("suggestedapps") || cn.contains("appsedge")) {
+                blurred = true;
+                break;
+            }
+            if (cn.contains("workspace") || cn.contains("hotseat")) {
+                blurred = false;
+                break;
+            }
+            p = p.getParent();
+            depth++;
+        }
+        sDrawerIconCache.put(v, blurred);
+        return blurred;
+    }
+
+    private static boolean isViewOnScreen(View v, int[] tmp) {
+        if (v == null || !v.isAttachedToWindow() || !v.isShown() || v.getAlpha() <= 0.01f) return false;
+        v.getLocationOnScreen(tmp);
+        int sw = v.getResources().getDisplayMetrics().widthPixels;
+        int sh = v.getResources().getDisplayMetrics().heightPixels;
+        return tmp[0] > -240 && tmp[0] < sw + 240 && tmp[1] > -240 && tmp[1] < sh + 240;
+    }
+
     private static void registerActiveIcon(View v) {
         if (v == null) return;
         synchronized (sActiveIcons) {
@@ -252,10 +374,10 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         @Override
                         public boolean onPreDraw() {
                             if (!isEnabled() || !opt(ModuleStatus.KEY_LIVE_REFRACTION, true)) return true;
+                            boolean anyMoved = false;
                             synchronized (sActiveIcons) {
                                 for (View iv : sActiveIcons) {
-                                    if (iv == null || !iv.isAttachedToWindow() || !iv.isShown()) continue;
-                                    iv.getLocationOnScreen(tmp);
+                                    if (!isViewOnScreen(iv, tmp)) continue;
                                     long packed = (((long) tmp[0]) << 32) | (tmp[1] & 0xFFFFFFFFL);
                                     long[] prev = sLastIconPos.get(iv);
                                     if (prev == null) {
@@ -263,8 +385,12 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                                     } else if (prev[0] != packed) {
                                         prev[0] = packed;
                                         iv.invalidate();
+                                        anyMoved = true;
                                     }
                                 }
+                            }
+                            if (anyMoved) {
+                                LiquidGlassRuntime.noteScrollMotion();
                             }
                             return true;
                         }
@@ -275,9 +401,10 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
     }
 
     private static void invalidateVisibleIcons() {
+        final int[] tmp = new int[2];
         synchronized (sActiveIcons) {
             for (View v : sActiveIcons) {
-                if (v != null && v.isAttachedToWindow() && v.isShown()) {
+                if (isViewOnScreen(v, tmp)) {
                     v.postInvalidateOnAnimation();
                 }
             }
@@ -528,7 +655,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             Drawable orig = (Drawable) param.args[0];
                             ComponentName cn = extractComponent(param.thisObject);
                             String lbl = extractLabel(param.thisObject);
-                            boolean liveRef = opt(ModuleStatus.KEY_LIVE_REFRACTION, true);
+                            boolean liveRef = opt(ModuleStatus.KEY_LIQUID_ICONS, true);
                             int sz = Math.max(orig.getIntrinsicWidth(), 192);
                             Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, orig, sz, liveRef);
                             if (themed != null) {
@@ -552,7 +679,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
 
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIVE_REFRACTION, true)) return;
+                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
                         if (!(param.thisObject instanceof TextView) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                         try {
@@ -585,20 +712,21 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             LiquidGlassRuntime.drawLiveLiquidBody(
                                     tv.getContext(), tv, canvas, left, top, boxW, boxH,
                                     screenX, screenY,
-                                    tx + scrollShift * 0.18f, ty,
-                                    getRefractionStrength()
+                                    tx + scrollShift * 0.16f, ty,
+                                    getRefractionStrength(),
+                                    getFrostLevel(),
+                                    isInBlurredContainer(tv)
                             );
                         } catch (Throwable ignored) {}
                     }
 
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIVE_REFRACTION, true)) return;
+                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
                         if (!(param.thisObject instanceof TextView) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                         try {
                             TextView tv = (TextView) param.thisObject;
-                            registerActiveIcon(tv);
                             Canvas canvas = (Canvas) param.args[0];
                             Drawable icon = getIconFromView(tv);
                             if (icon == null) return;
@@ -616,11 +744,11 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             tv.getLocationOnScreen(loc);
                             int sw = Math.max(tv.getResources().getDisplayMetrics().widthPixels, 1080);
                             float scrollShift = ((loc[0] + left + boxW * 0.5f) / (float) sw) * 2.0f - 1.0f;
-                            float tx = (opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f) + scrollShift * 0.25f;
+                            float tx = (opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f) + scrollShift * 0.22f;
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
 
-                            // Wet liquid specular glaze & razor-crisp Fresnel caustic rim ON TOP!
-                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, 0.92f);
+                            // Authentic iOS 26 corner-originating specular rim glow ON TOP!
+                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, getCornerGlowIntensity());
                         } catch (Throwable ignored) {}
                     }
                 });
@@ -658,7 +786,8 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
                             LiquidGlassRuntime.drawLiveLiquidBody(
                                     v.getContext(), v, c, left, top, iw - 2f * insetX, ih - 2f * insetY,
-                                    loc[0] + left, loc[1] + top, tx, ty, getRefractionStrength());
+                                    loc[0] + left, loc[1] + top, tx, ty,
+                                    getRefractionStrength(), getFrostLevel(), isInBlurredContainer(v));
                         } catch (Throwable ignored) {}
                     }
 
@@ -668,7 +797,6 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         try {
                             View v = (View) param.thisObject;
-                            registerActiveIcon(v);
                             Canvas c = (Canvas) param.args[0];
                             Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
                             int iw = (icon != null && icon.getBounds().width() >= 32)
@@ -680,7 +808,7 @@ public final class OneLiquidHook implements IXposedHookLoadPackage {
                             float top = v.getPaddingTop() + insetY;
                             float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
-                            LiquidGlassRuntime.drawLiveGlazeRim(c, left, top, iw - 2f * insetX, ih - 2f * insetY, tx, ty, false, 0.90f);
+                            LiquidGlassRuntime.drawLiveGlazeRim(c, left, top, iw - 2f * insetX, ih - 2f * insetY, tx, ty, false, getCornerGlowIntensity());
                         } catch (Throwable ignored) {}
                     }
                 });
