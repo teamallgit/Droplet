@@ -270,21 +270,22 @@ public final class DropletHook implements IXposedHookLoadPackage {
                 @Override
                 public void onSensorChanged(SensorEvent event) {
                     if (!isEnabled() || !opt(ModuleStatus.KEY_GYRO_TILT, true)) return;
-                    // Normalize gravity tilt cleanly to [-1..1] with smooth exponential damping
+                    if (!LiquidGlassRuntime.isHomeRecentlyActive()) return;
+                    // Normalize gravity tilt cleanly to [-1..1] with smooth 60Hz exponential damping
                     float gx = Math.max(-1f, Math.min(1f, -event.values[0] / 6.5f));
                     float gy = Math.max(-1f, Math.min(1f, (event.values[1] - 4.5f) / 6.5f));
-                    sTiltX = sTiltX * 0.78f + gx * 0.22f;
-                    sTiltY = sTiltY * 0.78f + gy * 0.22f;
+                    sTiltX = sTiltX * 0.72f + gx * 0.28f;
+                    sTiltY = sTiltY * 0.72f + gy * 0.28f;
 
                     // Only invalidate visible on-screen icons when tilt actually moves (zero idle battery drain!)
-                    if (Math.abs(sTiltX - sLastNotifiedTiltX) > 0.024f || Math.abs(sTiltY - sLastNotifiedTiltY) > 0.024f) {
+                    if (Math.abs(sTiltX - sLastNotifiedTiltX) > 0.012f || Math.abs(sTiltY - sLastNotifiedTiltY) > 0.012f) {
                         sLastNotifiedTiltX = sTiltX;
                         sLastNotifiedTiltY = sTiltY;
                         invalidateVisibleIcons();
                     }
                 }
                 @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
-            }, s, SensorManager.SENSOR_DELAY_UI);
+            }, s, SensorManager.SENSOR_DELAY_GAME);
         } catch (Throwable t) {
             XposedBridge.log(TAG + "gyro setup err: " + t);
         }

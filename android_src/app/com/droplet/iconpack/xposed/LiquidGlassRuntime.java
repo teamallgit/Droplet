@@ -53,10 +53,13 @@ public final class LiquidGlassRuntime {
 
     private static final String TAG = "Droplet-Glass: ";
 
-    // High-detail 1/3-res Home texture (360x780 + GPU FILTER_MODE_LINEAR = crisp background details, zero pixelation!)
+    // High-detail 1/3-res Static Home texture (360x780, captured once -> 0% ongoing CPU!)
+    // + fast 216x468 animated Live Wallpaper texture (~30fps smooth!)
     // + ultra-silky 90x195 2-pass blurred App Drawer texture (~0.3ms + FILTER_MODE_LINEAR = ~140px smooth Gaussian!)
     private static final int CAP_W = 360;
     private static final int CAP_H = 780;
+    private static final int LIVE_CAP_W = 216;
+    private static final int LIVE_CAP_H = 468;
     private static final int DRAWER_W = 90;
     private static final int DRAWER_H = 195;
 
@@ -315,6 +318,7 @@ public final class LiquidGlassRuntime {
     private static volatile float sAutoTintB = 0.96f;
     private static volatile boolean sAutoTintInit = false;
     private static volatile long sLastHomeDrawMs = 0L;
+    private static volatile long sLastDrawerDrawMs = 0L;
     private static volatile long sLastMotionMs = 0L;
     private static volatile boolean sCaptureLoggedOnce = false;
     private static volatile boolean sCaptureFailedPermanently = false;
@@ -420,6 +424,10 @@ public final class LiquidGlassRuntime {
      */
     public static void noteScrollMotion() {
         sLastMotionMs = System.currentTimeMillis();
+    }
+
+    public static boolean isHomeRecentlyActive() {
+        return (System.currentTimeMillis() - sLastHomeDrawMs) < 1500L;
     }
 
     public static void setWallpaperOffsets(float xOff, float yOff) {
@@ -712,7 +720,7 @@ public final class LiquidGlassRuntime {
      * using live sWallOffsetX / sWallOffsetY (default 0.5 centered), preventing horizontal squashing
      * or mXOffset misalignment on wide/parallax wallpapers!
      */
-    private static Bitmap cropAndScaleToViewport(Bitmap raw, int sw, int sh) {
+    private static Bitmap cropAndScaleToViewport(Bitmap raw, int sw, int sh, int outW, int outH) {
         Bitmap src = raw;
         boolean recycleSrc = false;
         if (Build.VERSION.SDK_INT >= 26 && raw.getConfig() == Bitmap.Config.HARDWARE) {
@@ -739,10 +747,10 @@ public final class LiquidGlassRuntime {
         } else {
             srcRect = new Rect(0, 0, rw, rh);
         }
-        Bitmap out = Bitmap.createBitmap(CAP_W, CAP_H, Bitmap.Config.ARGB_8888);
+        Bitmap out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        c.drawBitmap(src, srcRect, new Rect(0, 0, CAP_W, CAP_H), p);
+        c.drawBitmap(src, srcRect, new Rect(0, 0, outW, outH), p);
         if (recycleSrc) src.recycle();
         return out;
     }
@@ -760,6 +768,9 @@ public final class LiquidGlassRuntime {
             isLive = (wm.getWallpaperInfo() != null);
         } catch (Throwable ignored) {}
 
+        int targetW = isLive ? LIVE_CAP_W : CAP_W;
+        int targetH = isLive ? LIVE_CAP_H : CAP_H;
+
         // For STATIC wallpapers (ImageWallpaper): ALWAYS use WallpaperManager.getDrawable() FIRST!
         // Reason: IWindowManager.screenshotWallpaper() on Samsung One UI captures ImageWallpaper's raw
         // wider surface (e.g. 1476x2340) at x=0 without mXOffset (-198px), shifting icons by a full column!
@@ -771,16 +782,16 @@ public final class LiquidGlassRuntime {
                 if (wd != null) {
                     int dw = wd.getIntrinsicWidth(), dh = wd.getIntrinsicHeight();
                     origW = dw; origH = dh;
-                    Bitmap b = Bitmap.createBitmap(CAP_W, CAP_H, Bitmap.Config.ARGB_8888);
+                    Bitmap b = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888);
                     Canvas c = new Canvas(b);
                     if (dw > 0 && dh > 0) {
-                        float s = Math.max(CAP_W / (float) dw, CAP_H / (float) dh);
+                        float s = Math.max(targetW / (float) dw, targetH / (float) dh);
                         int rw = Math.round(dw * s), rh = Math.round(dh * s);
-                        int ox = -Math.round((rw - CAP_W) * sWallOffsetX);
-                        int oy = -Math.round((rh - CAP_H) * sWallOffsetY);
+                        int ox = -Math.round((rw - targetW) * sWallOffsetX);
+                        int oy = -Math.round((rh - targetH) * sWallOffsetY);
                         wd.setBounds(ox, oy, ox + rw, oy + rh);
                     } else {
-                        wd.setBounds(0, 0, CAP_W, CAP_H);
+                        wd.setBounds(0, 0, targetW, targetH);
                     }
                     wd.draw(c);
                     if (isBitmapNonBlack(b)) {
@@ -801,7 +812,7 @@ public final class LiquidGlassRuntime {
                 if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
                     Bitmap bm = (Bitmap) bObj;
                     origW = bm.getWidth(); origH = bm.getHeight();
-                    raw = cropAndScaleToViewport(bm, sw, sh);
+                    raw = cropAndScaleToViewport(bm, sw, sh, targetW, targetH);
                     methodUsed = "IWindowManager.screenshotWallpaper";
                     sUsedFallbackCapture = false;
                 }
@@ -820,7 +831,7 @@ public final class LiquidGlassRuntime {
                     }
                 }
                 if (sMirrorSc != null && sMirrorSc.isValid()) {
-                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, null, 0.30f);
+                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, null, 0.25f);
                     if (shb != null) {
                         if (sHwBufAsBitmapMethod == null) {
                             sHwBufAsBitmapMethod = shb.getClass().getMethod("asBitmap");
@@ -829,7 +840,7 @@ public final class LiquidGlassRuntime {
                         if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
                             Bitmap bm = (Bitmap) bObj;
                             origW = bm.getWidth(); origH = bm.getHeight();
-                            raw = cropAndScaleToViewport(bm, sw, sh);
+                            raw = cropAndScaleToViewport(bm, sw, sh, targetW, targetH);
                             methodUsed = "mirrorWallpaperSurface+captureLayers";
                             sUsedFallbackCapture = true;
                         }
@@ -873,10 +884,11 @@ public final class LiquidGlassRuntime {
 
             // ZERO-STUTTER SCROLL PROTECTION: if user is actively swiping/scrolling, skip Binder capture
             // so scrolling stays locked at 120.0 FPS on GPU! Resume smoothly right after scroll settles.
-            if (sHomeWallShader != null && (now - sLastMotionMs < 180L)) {
-                if (sCapHandler != null) sCapHandler.postDelayed(this, 60L);
+            if (sHomeWallShader != null && (now - sLastMotionMs < 120L)) {
+                if (sCapHandler != null) sCapHandler.postDelayed(this, 45L);
                 return;
             }
+            long tickStartNs = System.nanoTime();
 
             try {
                 WallpaperManager wm = WallpaperManager.getInstance(ctx);
@@ -913,31 +925,38 @@ public final class LiquidGlassRuntime {
                 Bitmap homeBmp = buildPreBlurredBitmap(rawPx, w, h, homeBlurR, homeBlurR >= 3 ? 2 : 1, false);
                 sHomeWallShader = makeLinearShader(homeBmp);
 
-                // 2. Pre-blur App Drawer texture (90x195 2-pass r=8 + FILTER_MODE_LINEAR = silky ~140px Gaussian!)
-                Bitmap tiny = Bitmap.createScaledBitmap(small, DRAWER_W, DRAWER_H, true);
+                // 2. Lazy App Drawer texture + Auto Tint: skip redundant drawer blur when only Home Screen is visible!
+                boolean needDrawer = (sDrawerWallShader == null) || !sIsLiveWallpaper || ((now - sLastDrawerDrawMs) < 2000L);
+                if (needDrawer || (sFrameCount % 4L == 0L)) {
+                    Bitmap tiny = Bitmap.createScaledBitmap(small, DRAWER_W, DRAWER_H, true);
+                    int dw = tiny.getWidth(), dh = tiny.getHeight();
+                    if (sDrawerRawPx == null || sDrawerRawPx.length < dw * dh) sDrawerRawPx = new int[dw * dh];
+                    int[] drawerRaw = sDrawerRawPx;
+                    tiny.getPixels(drawerRaw, 0, dw, 0, 0, dw, dh);
+                    tiny.recycle();
+                    updateAutoTintFromPixels(drawerRaw, dw * dh);
+                    if (needDrawer) {
+                        Bitmap drawerBmp = buildPreBlurredBitmap(drawerRaw, dw, dh, 8, 2, true);
+                        sDrawerWallScaleX = dw / (float) sw;
+                        sDrawerWallScaleY = dh / (float) sh;
+                        sDrawerWallShader = makeLinearShader(drawerBmp);
+                    }
+                }
                 small.recycle();
-                int dw = tiny.getWidth(), dh = tiny.getHeight();
-                if (sDrawerRawPx == null || sDrawerRawPx.length < dw * dh) sDrawerRawPx = new int[dw * dh];
-                int[] drawerRaw = sDrawerRawPx;
-                tiny.getPixels(drawerRaw, 0, dw, 0, 0, dw, dh);
-                tiny.recycle();
-                updateAutoTintFromPixels(drawerRaw, dw * dh);
-                Bitmap drawerBmp = buildPreBlurredBitmap(drawerRaw, dw, dh, 8, 2, true);
-                sDrawerWallScaleX = dw / (float) sw;
-                sDrawerWallScaleY = dh / (float) sh;
-                sDrawerWallShader = makeLinearShader(drawerBmp);
 
                 sFrameCount++;
                 if (sFrameCount == 15L) {
-                    XposedBridge.log(TAG + "Optimized live pump active (15 low-overhead frames rendered)");
+                    XposedBridge.log(TAG + "Smooth 30fps live pump active (15 low-overhead frames rendered)");
                 }
                 Runnable cb = sFrameInvalidateCb;
                 if (cb != null) cb.run();
 
-                // Light ~10fps cadence on live wallpaper (smooth fluid motion, 3.5x less Binder/SurfaceFlinger load!)
+                // Clean frame-paced ~30fps cadence on live wallpapers (33ms target minus capture time)!
                 // Static wallpaper captures ONCE -> 0% ongoing CPU/GPU!
                 if (sIsLiveWallpaper && sCapHandler != null) {
-                    sCapHandler.postDelayed(this, 95L);
+                    long elapsedMs = (System.nanoTime() - tickStartNs) / 1_000_000L;
+                    long delayMs = Math.max(10L, 33L - elapsedMs);
+                    sCapHandler.postDelayed(this, delayMs);
                 } else {
                     sCapRunning = false;
                 }
@@ -1023,7 +1042,9 @@ public final class LiquidGlassRuntime {
             sAppCtx = ctx.getApplicationContext() != null ? ctx.getApplicationContext() : ctx;
         }
         setFrostLevel(frost01);
-        sLastHomeDrawMs = System.currentTimeMillis();
+        long nowMs = System.currentTimeMillis();
+        sLastHomeDrawMs = nowMs;
+        if (isAppDrawer) sLastDrawerDrawMs = nowMs;
         kickLiveCaptureIfNeeded();
 
         float tStr = (tintColor != 0) ? Math.max(0f, Math.min(1f, tintStrength)) : 0f;

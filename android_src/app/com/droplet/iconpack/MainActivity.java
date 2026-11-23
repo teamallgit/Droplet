@@ -104,6 +104,7 @@ public class MainActivity extends Activity {
     private TextView tintNameLbl;
     private final List<View> tintSwatchViews = new ArrayList<>();
     private final List<View> lsposedControls = new ArrayList<>();
+    private final List<Runnable> uiSyncActions = new ArrayList<>();
     private LinearLayout statusListContainer;
     private TextView restartHomeRow;
     private TextView restartSysUiRow;
@@ -526,6 +527,12 @@ public class MainActivity extends Activity {
         restartSysUiRow.setOnClickListener(v -> confirmAndRestart("SystemUI", "killall com.android.systemui || pkill -f com.android.systemui"));
         sysCard.addView(restartSysUiRow);
 
+        sysCard.addView(makeInsetSeparator());
+        TextView resetRow = makeIosActionRow("Reset to Defaults");
+        resetRow.setTextColor(Color.parseColor("#FF453A"));
+        resetRow.setOnClickListener(v -> confirmResetToDefaults());
+        sysCard.addView(resetRow);
+
         LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         sLp.bottomMargin = dp(24);
@@ -573,6 +580,11 @@ public class MainActivity extends Activity {
         sb.setPadding(dp(4), dp(8), dp(4), dp(4));
         styleIosSlider(sb);
         lsposedControls.add(sb);
+        uiSyncActions.add(() -> {
+            int v = prefs.getInt(prefKey, defVal);
+            sb.setProgress(v);
+            valLbl.setText(v + "%");
+        });
 
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -884,6 +896,7 @@ public class MainActivity extends Activity {
         sw.setChecked(prefs.getBoolean(prefKey, defVal));
         styleIosSwitch(sw);
         lsposedControls.add(sw);
+        uiSyncActions.add(() -> sw.setChecked(prefs.getBoolean(prefKey, defVal)));
         sw.setOnCheckedChangeListener((btn, isChecked) -> {
             SharedPreferences.Editor ed = prefs.edit().putBoolean(prefKey, isChecked);
             if (ModuleStatus.KEY_LIQUID_ICONS.equals(prefKey)) {
@@ -964,6 +977,37 @@ public class MainActivity extends Activity {
                 applyLsposedState();
             });
         });
+    }
+
+    private void confirmResetToDefaults() {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Reset to Defaults?")
+                .setMessage("This will restore all glass sliders, tint, and effects to their default values.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Reset", (d, w) -> {
+                    prefs.edit()
+                            .putBoolean(ModuleStatus.KEY_LSPOSED_ENABLED, true)
+                            .putBoolean(ModuleStatus.KEY_LIQUID_ICONS, true)
+                            .putBoolean(ModuleStatus.KEY_LIVE_REFRACTION, true)
+                            .putBoolean(ModuleStatus.KEY_GYRO_TILT, true)
+                            .putBoolean(ModuleStatus.KEY_GLASS_FOLDERS, true)
+                            .putBoolean(ModuleStatus.KEY_SYSTEMUI_GLASS, true)
+                            .putInt(ModuleStatus.KEY_FROST_AMOUNT, 22)
+                            .putInt(ModuleStatus.KEY_MAG_AMOUNT, 62)
+                            .putInt(ModuleStatus.KEY_GLOW_AMOUNT, 78)
+                            .putInt(ModuleStatus.KEY_TINT_COLOR, 0)
+                            .putInt(ModuleStatus.KEY_TINT_STRENGTH, 0)
+                            .commit();
+                    if (masterSwitch != null) masterSwitch.setChecked(true);
+                    if (tintStrengthSeek != null) tintStrengthSeek.setProgress(0);
+                    if (tintStrengthValLbl != null) tintStrengthValLbl.setText("0%");
+                    for (Runnable r : uiSyncActions) r.run();
+                    refreshTintSwatches();
+                    applyLsposedState();
+                    notifyHooksPrefsChanged();
+                    Toast.makeText(this, "Reset to defaults", Toast.LENGTH_SHORT).show();
+                })
+                .show();
     }
 
     private void confirmAndRestart(String targetLabel, String rootCmd) {
