@@ -1,57 +1,104 @@
 <p align="center">
-  <img src="assets/droplet_banner.png" width="760" alt="Droplet Banner" />
+  <img src="assets/droplet_banner.png" width="800" alt="Droplet — iOS 26 Liquid Glass for Samsung One UI" />
 </p>
 
 <h1 align="center">Droplet</h1>
 
 <p align="center">
-  <strong>iOS 26 / 27 Clear Liquid Glass Icon Pack &amp; LSPosed Module for Samsung One UI (8 / 8.5 / 9+)</strong><br/>
-  1,020+ solid-filled translucent frosted-glass icons with Apple continuous-squircle geometry, plus an optional built-in LSPosed module for true 120fps GPU AGSL live wallpaper refraction, convex lens magnification, chromatic dispersion, and gyroscope tilt caustics — all in one APK.
+  <strong>iOS 26 Clear Liquid Glass Icon Pack &amp; Real-Time LSPosed Module for Samsung One UI</strong>
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/teamallgit/Droplet?style=flat-square&color=3E8BFF&label=Download" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/One%20UI-8%20%7C%208.5%20%7C%209%2B-1C1C1E?style=flat-square" alt="One UI 8 / 8.5 / 9+" />
+  <img src="https://img.shields.io/badge/Icons-1%2C020%2B-1C1C1E?style=flat-square" alt="1,020+ Icons" />
+  <img src="https://img.shields.io/badge/Root-Optional-34D399?style=flat-square" alt="Root Optional" />
 </p>
 
 ---
 
-## Features
+## Live Liquid Glass in Action
 
-- **1:1 iOS 26 Clear Liquid Glass Aesthetic** — Calibrated against Apple's official iOS 26 Clear Home Screen: pure-white top-to-bottom translucent frosted glyphs, crystal-clear glass body so your wallpaper shines through, and razor-crisp anisotropic Fresnel specular rim catchlights (top-left `-135°` & bottom-right `+45°`).
-- **1,020+ Solid-Filled Liquid Glass Icons** — Full coverage of mainstream & niche Android apps (mapped across 2,700+ `ComponentInfo` activities in `appfilter.xml`), combining bespoke iOS 26 Clear system icons, optically normalized stock glyphs, and 900+ **solid-filled** official brand vectors from [Simple Icons](https://simpleicons.org/).
-- **Continuous Squircle Geometry** — Supersampled (`512×512` → `192×192`) smooth continuous squircle (`n = 4.50`) with exact Euclidean SDF normals and unified optical visual-weight scaling.
-- **Built-In LSPosed Module (One UI 8 / 8.5 / 9+)** — Distributed inside the exact same `Droplet.apk` with a native **Samsung One UI Dark Settings interface**: master **On / Off** switch bar, automatic LSPosed detection & setup guide (grays out root-only controls if LSPosed isn't active), live **Clarity & Frost (`Clear Liquid` ↔ `Frosted`)**, **Magnification & Refraction**, **Corner Light Glow**, and **Optical Glass Tint + Tint Strength** sliders (9 curated presets + Custom RGB picker), live module status, and **Restart Home / Restart SystemUI** controls:
-  - **Heavily Optimized Real-Time Live Wallpaper Magnification & Refraction**: Pre-blurs crisp `270×585` live wallpaper textures off the UI thread with hardware GPU bilinear filtering (`FILTER_MODE_LINEAR`), scroll-aware capture pausing (120fps scrolling, zero lag), viewport-culled icon redraws, and a 1-tap center / 3-tap bevel AGSL lens shader (~18× fewer GPU texture fetches).
-  - **Corner-Originating Apple iOS 26 Specular Glow**: Quiet hairline along straight edges with brilliant liquid-glass light arcs originating strictly from the 45° curved corners (`-135°` TL & `+45°` BR) and gliding live with phone tilt.
-  - **App Drawer Extra-Blur Matching**: Automatically detects One UI's blurred App Drawer, Open Folders, and Overlay Apps containers and feeds a pre-heavily-blurred, gently dimmed backdrop texture so icons blend seamlessly instead of looking sharper than the blurred drawer behind them.
-  - **1:1 Floating Frosted Glyphs & Glass Folders**: Bold, full-sized translucent frosted-white glyphs with soft suspended depth shadows floating inside each live magnifying glass tile (zero double borders).
-  - **SystemUI Glass Polish**: Subtle translucent Liquid Glass specular rims in `com.android.systemui`.
+<p align="center">
+  <img src="assets/demo_refraction.gif" width="720" alt="Droplet Live Liquid Glass Refraction & Corner Glow" /><br/>
+  <sub><em>Real-time convex lens magnification, curved bevel RGB dispersion, and tilt-reactive corner specular glow over live &amp; static wallpapers.</em></sub>
+</p>
 
-## Icon Preview (288 of 1,020+ Icons)
+<p align="center">
+  <img src="assets/demo_customization.gif" width="720" alt="Droplet Live Clarity to Frost and Optical Glass Tint" /><br/>
+  <sub><em>Live <strong>Clarity &amp; frost</strong> (0% pure crystal glass &harr; 100% heavy frost) and <strong>Optical Glass Tint</strong> (9 presets + Custom RGB picker) with instant 0ms updates.</em></sub>
+</p>
 
-| Part 1 | Part 2 |
+---
+
+## Two Ways to Use Droplet
+
+Everything ships inside a single **`Droplet.apk`**. No-root users get the full 1,020+ icon pack immediately; rooted users with LSPosed unlock live GPU optical glass effects and real-time sliders.
+
+| Capability | No Root (Theme Park) | Root + LSPosed Module |
+| :--- | :---: | :---: |
+| **1,020+ solid-filled iOS 26 Clear Liquid Glass icons** (`2,700+` app mappings) | &#x2705; | &#x2705; |
+| **Apple continuous-squircle geometry** (`n = 4.50`) &amp; translucent frosted glyphs | &#x2705; | &#x2705; |
+| **Live 120fps GPU wallpaper magnification &amp; curved bevel refraction** | &mdash; | &#x2705; |
+| **Gyroscope tilt-reactive corner specular glow** | &mdash; | &#x2705; |
+| **Live Clarity &harr; Frost, Magnification, Glow &amp; Optical Glass Tint sliders** | &mdash; | &#x2705; |
+| **Automatic App Drawer extra-blur matching** | &mdash; | &#x2705; |
+| **Glass Folders &amp; SystemUI specular rims** | &mdash; | &#x2705; |
+
+---
+
+## Capabilities
+
+### Optical Liquid Glass Engine (Optimized for 120fps)
+- **Live Convex Magnification &amp; Bevel Refraction**: Samples your live or static wallpaper in real time with a 1-tap center / 3-tap outer-bevel AGSL fragment shader (`~18&times;` lighter than multi-tap shader blur) and hardware GPU bilinear filtering (`FILTER_MODE_LINEAR`) on `270&times;585` pre-blurred textures.
+- **Zero-Stutter Scrolling &amp; Viewport Culling**: Pauses background wallpaper capture during active touch/scroll so Home Screen and App Drawer scrolling stays locked at 120fps, and skips off-screen icons during redraws and tilt updates.
+- **Corner-Originating Specular Glow**: Quiet optical hairline along straight edges with bright liquid-glass specular arcs originating strictly from the 45&deg; curved corners (`-135&deg;` top-left &amp; `+45&deg;` bottom-right) that shift naturally as you tilt your phone.
+- **App Drawer Extra-Blur Matching**: Automatically detects One UI's blurred containers (App Drawer, Open Folders, Overlay Apps, Suggested Apps) and switches those icons to a dedicated silky-blurred backdrop texture so they blend seamlessly instead of looking sharper than the blurred drawer behind them.
+- **Icons-Only Scope**: Carefully leaves Home Screen widgets untouched so your other One UI &amp; LSPosed modules keep working cleanly.
+
+### Native Samsung One UI Companion App
+- **Automatic LSPosed Detection**: Automatically detects whether the LSPosed module is active — hides the setup guide when active, and grays out root-only sliders/toggles with a clear 3-step setup guide when inactive.
+- **Master Switch &amp; Live Sliders**:
+  - **Clarity &amp; frost**: `0%` pure crystal-clear glass (zero white wash) &harr; `100%` heavy frosted glass.
+  - **Magnification &amp; refraction**: `Subtle` &harr; `Strong` convex lens &amp; edge bend.
+  - **Corner light glow**: `Off` &harr; `Bright` specular corner highlights.
+  - **Glass tint &amp; Tint strength**: `None`, 9 curated glass presets (`Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Amber`, `Mint`, `Dark`), plus a **Custom RGB color picker** with live hex preview.
+- **Live Status &amp; One-Tap Restart**: Live connection status for LSPosed, One UI Home, SystemUI, and Root, plus one-tap **Restart Home** and **Restart SystemUI** buttons.
+
+---
+
+## Icon Pack Preview
+
+*120 of 1,020+ solid-filled iOS 26 Clear Liquid Glass icons:*
+
+| Core &amp; Popular | Apps &amp; Services |
 | :---: | :---: |
 | ![Droplet Preview Part 1](assets/preview_part1.png) | ![Droplet Preview Part 2](assets/preview_part2.png) |
 
-| Part 3 | Part 4 |
+| More Mainstream | Niche &amp; Utilities |
 | :---: | :---: |
 | ![Droplet Preview Part 3](assets/preview_part3.png) | ![Droplet Preview Part 4](assets/preview_part4.png) |
+
+---
 
 ## Installation
 
 ### Option A — No Root (Samsung Good Lock / Theme Park)
-1. Download **`Droplet.apk`** from the [Releases](../../releases/latest) page and install it.
-2. Open **Good Lock → Theme Park → Icon** (or open **Droplet → Icons tab → Apply via Theme Park**).
-3. Tap **Create New → Iconpack → Third Party → Droplet**.
-4. Keep **Shape** unmodified (original) and **Effects** set to **None** so One UI preserves the exact squircle geometry and specular glass rim.
-5. Tap **Save** (top-right), name your pack, and tap **Apply**.
+1. Download **`Droplet.apk`** from [Releases](../../releases/latest) and install it.
+2. Open **Droplet &rarr; Icons tab &rarr; Apply** (or open **Good Lock &rarr; Theme Park &rarr; Icon**).
+3. Tap **Create New &rarr; Iconpack &rarr; Third Party &rarr; Droplet**.
+4. Leave **Shape** unmodified and **Effects** set to **None** so One UI preserves the exact squircle geometry and specular rim.
+5. Tap **Save** and **Apply**.
 
-### Option B — LSPosed Module (One UI 8 / 8.5 / 9+ with Root)
-1. Install **`Droplet.apk`** from [Releases](../../releases/latest).
-2. Open **LSPosed Manager → Modules → Droplet** and enable it.
-3. Tick the recommended scope:
+### Option B — Root + LSPosed (One UI 8 / 8.5 / 9+)
+1. Download and install **`Droplet.apk`** from [Releases](../../releases/latest).
+2. Open **LSPosed Manager &rarr; Modules &rarr; Droplet** and enable it.
+3. Select the recommended scope:
    - **One UI Home** (`com.sec.android.app.launcher`)
    - **SystemUI** (`com.android.systemui`)
-4. Open the **Droplet** app → **LSPosed Module** tab:
-   - Toggle **Enable Droplet LSPosed Module** ON and choose your effects.
-   - Check the **LSPosed Checklist & Live Status** panel.
-   - Tap **Restart One UI Home** and **Restart SystemUI** to apply immediately.
+4. Open **Droplet**, customize your glass sliders/tint, and tap **Restart Home** (and **Restart SystemUI** if using SystemUI rims).
+
+---
 
 ## Building from Source
 
@@ -65,6 +112,8 @@ python3 -m venv .venv
 .venv/bin/python build_apk.py
 ```
 
-## Notes
+---
 
-- Brand logos are sourced from [Simple Icons](https://simpleicons.org/) and belong to their respective trademark holders.
+## Credits
+
+- Brand vectors are sourced from [Simple Icons](https://simpleicons.org/) and belong to their respective trademark holders.
