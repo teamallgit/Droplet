@@ -302,27 +302,25 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         if (listenWallpaper) {
                             setupGyroSensor(app);
                         }
-                        IntentFilter f = new IntentFilter();
-                        f.addAction(pingAction);
-                        f.addAction(ModuleStatus.ACTION_RELOAD_PREFS);
-                        if (listenWallpaper) {
-                            f.addAction(Intent.ACTION_WALLPAPER_CHANGED);
-                        }
-                        BroadcastReceiver br = new BroadcastReceiver() {
+                        // 1. Signature-permission-gated command receiver (only Droplet itself can send config/ping!)
+                        IntentFilter cmdFilter = new IntentFilter();
+                        cmdFilter.addAction(pingAction);
+                        cmdFilter.addAction(ModuleStatus.ACTION_RELOAD_PREFS);
+                        BroadcastReceiver cmdReceiver = new BroadcastReceiver() {
                             @Override
                             public void onReceive(Context context, Intent intent) {
                                 String act = intent != null ? intent.getAction() : null;
-                                if (Intent.ACTION_WALLPAPER_CHANGED.equals(act)) {
-                                    LiquidGlassRuntime.invalidateWallpaperCache();
-                                    invalidateVisibleIcons();
-                                } else if (ModuleStatus.ACTION_RELOAD_PREFS.equals(act)) {
+                                if (ModuleStatus.ACTION_RELOAD_PREFS.equals(act)) {
                                     reloadPrefs();
                                     applyPrefsFromIntent(intent);
                                     invalidateVisibleIcons();
                                 } else if (pingAction.equals(act)) {
+                                    String nonce = intent.getStringExtra(ModuleStatus.EXTRA_NONCE);
+                                    if (nonce == null || nonce.isEmpty()) return;
                                     reloadPrefs();
                                     Intent pong = new Intent(ModuleStatus.ACTION_PONG);
                                     pong.setPackage(ModuleStatus.PKG);
+                                    pong.putExtra(ModuleStatus.EXTRA_NONCE, nonce);
                                     pong.putExtra("target", targetName);
                                     pong.putExtra("hooks", hookCounter.get());
                                     pong.putExtra("enabled", isEnabled());
@@ -332,9 +330,30 @@ public final class DropletHook implements IXposedHookLoadPackage {
                             }
                         };
                         if (Build.VERSION.SDK_INT >= 33) {
-                            app.registerReceiver(br, f, Context.RECEIVER_EXPORTED);
+                            app.registerReceiver(cmdReceiver, cmdFilter,
+                                    ModuleStatus.PERM_CONTROL_BROADCAST, null, Context.RECEIVER_EXPORTED);
                         } else {
-                            app.registerReceiver(br, f);
+                            app.registerReceiver(cmdReceiver, cmdFilter,
+                                    ModuleStatus.PERM_CONTROL_BROADCAST, null);
+                        }
+
+                        // 2. Separate system-event receiver for wallpaper changes (system_server doesn't hold Droplet's signature perm)
+                        if (listenWallpaper) {
+                            IntentFilter wallFilter = new IntentFilter(Intent.ACTION_WALLPAPER_CHANGED);
+                            BroadcastReceiver wallReceiver = new BroadcastReceiver() {
+                                @Override
+                                public void onReceive(Context context, Intent intent) {
+                                    if (intent != null && Intent.ACTION_WALLPAPER_CHANGED.equals(intent.getAction())) {
+                                        LiquidGlassRuntime.invalidateWallpaperCache();
+                                        invalidateVisibleIcons();
+                                    }
+                                }
+                            };
+                            if (Build.VERSION.SDK_INT >= 33) {
+                                app.registerReceiver(wallReceiver, wallFilter, Context.RECEIVER_EXPORTED);
+                            } else {
+                                app.registerReceiver(wallReceiver, wallFilter);
+                            }
                         }
                     } catch (Throwable t) {
                         XposedBridge.log(TAG + "receiver err in " + targetName + ": " + t);

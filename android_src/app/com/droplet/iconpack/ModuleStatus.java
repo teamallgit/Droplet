@@ -34,6 +34,8 @@ public final class ModuleStatus {
     public static final String ACTION_PING_SYSUI = "com.droplet.iconpack.ACTION_PING_SYSUI";
     public static final String ACTION_PONG = "com.droplet.iconpack.ACTION_PONG";
     public static final String ACTION_RELOAD_PREFS = "com.droplet.iconpack.ACTION_RELOAD_PREFS";
+    public static final String PERM_CONTROL_BROADCAST = "com.droplet.iconpack.permission.CONTROL_BROADCAST";
+    public static final String EXTRA_NONCE = "nonce";
 
     public static final String PKG_ONEUI_HOME = "com.sec.android.app.launcher";
     public static final String PKG_SYSTEMUI = "com.android.systemui";
@@ -44,7 +46,7 @@ public final class ModuleStatus {
     }
 
     public static String getModuleVersion() {
-        return "2.8.1";
+        return "2.8.2";
     }
 
     public static int getOneUiVersionInt() {

@@ -36,6 +36,7 @@ import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -109,9 +110,23 @@ public class MainActivity extends Activity {
     private TextView restartHomeRow;
     private TextView restartSysUiRow;
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private volatile boolean statusCheckPending = false;
+    private volatile String pendingStatusNonce = null;
     private volatile boolean homeScopeResponded = false;
     private volatile boolean sysUiScopeResponded = false;
     private BroadcastReceiver pongReceiver;
+
+    private static String generateNonce() {
+        byte[] bytes = new byte[16];
+        SECURE_RANDOM.nextBytes(bytes);
+        StringBuilder sb = new StringBuilder(32);
+        for (byte b : bytes) {
+            sb.append(Character.forDigit((b >>> 4) & 0xF, 16));
+            sb.append(Character.forDigit(b & 0xF, 16));
+        }
+        return sb.toString();
+    }
 
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
@@ -201,7 +216,10 @@ public class MainActivity extends Activity {
         pongReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                if (intent == null) return;
+                if (intent == null || !statusCheckPending) return;
+                String expected = pendingStatusNonce;
+                String received = intent.getStringExtra(ModuleStatus.EXTRA_NONCE);
+                if (expected == null || received == null || !expected.equals(received)) return;
                 String target = intent.getStringExtra("target");
                 if ("launcher".equals(target)) homeScopeResponded = true;
                 else if ("systemui".equals(target)) sysUiScopeResponded = true;
@@ -940,6 +958,9 @@ public class MainActivity extends Activity {
     }
 
     private void runStatusChecks() {
+        final String nonce = generateNonce();
+        pendingStatusNonce = nonce;
+        statusCheckPending = true;
         homeScopeResponded = false;
         sysUiScopeResponded = false;
         statusListContainer.removeAllViews();
@@ -948,9 +969,11 @@ public class MainActivity extends Activity {
         try {
             Intent p1 = new Intent(ModuleStatus.ACTION_PING_HOME);
             p1.setPackage(ModuleStatus.PKG_ONEUI_HOME);
+            p1.putExtra(ModuleStatus.EXTRA_NONCE, nonce);
             sendBroadcast(p1);
             Intent p2 = new Intent(ModuleStatus.ACTION_PING_SYSUI);
             p2.setPackage(ModuleStatus.PKG_SYSTEMUI);
+            p2.putExtra(ModuleStatus.EXTRA_NONCE, nonce);
             sendBroadcast(p2);
         } catch (Throwable ignored) {}
 
@@ -959,6 +982,11 @@ public class MainActivity extends Activity {
             try { Thread.sleep(400); } catch (InterruptedException ignored) {}
 
             ui.post(() -> {
+                // Close status check window so stale or unsolicited PONGs are rejected
+                if (nonce.equals(pendingStatusNonce)) {
+                    statusCheckPending = false;
+                    pendingStatusNonce = null;
+                }
                 statusListContainer.removeAllViews();
                 boolean modActive = ModuleStatus.isModuleActive();
                 boolean homeOk = homeScopeResponded;

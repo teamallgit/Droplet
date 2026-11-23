@@ -179,10 +179,16 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.droplet.iconpack"
-    android:versionCode="24"
-    android:versionName="2.8.1">
+    android:versionCode="25"
+    android:versionName="2.8.2">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+
+    <!-- Signature-protected permission restricting live config & status broadcasts to Droplet only -->
+    <permission
+        android:name="com.droplet.iconpack.permission.CONTROL_BROADCAST"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.droplet.iconpack.permission.CONTROL_BROADCAST" />
 
     <queries>
         <package android:name="com.sec.android.app.launcher" />
