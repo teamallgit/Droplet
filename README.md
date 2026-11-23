@@ -50,20 +50,21 @@ Everything ships inside a single **`Droplet.apk`**. No-root users get the full 1
 ## Capabilities
 
 ### Optical Liquid Glass Engine (Optimized for 120fps)
-- **Live Convex Magnification &amp; Bevel Refraction**: Samples your live or static wallpaper in real time with a 1-tap center / 3-tap outer-bevel AGSL fragment shader (`~18&times;` lighter than multi-tap shader blur) and hardware GPU bilinear filtering (`FILTER_MODE_LINEAR`) on `270&times;585` pre-blurred textures.
-- **Zero-Stutter Scrolling &amp; Viewport Culling**: Pauses background wallpaper capture during active touch/scroll so Home Screen and App Drawer scrolling stays locked at 120fps, and skips off-screen icons during redraws and tilt updates.
-- **Corner-Originating Specular Glow**: Quiet optical hairline along straight edges with bright liquid-glass specular arcs originating strictly from the 45&deg; curved corners (`-135&deg;` top-left &amp; `+45&deg;` bottom-right) that shift naturally as you tilt your phone.
-- **App Drawer Extra-Blur Matching**: Automatically detects One UI's blurred containers (App Drawer, Open Folders, Overlay Apps, Suggested Apps) and switches those icons to a dedicated silky-blurred backdrop texture so they blend seamlessly instead of looking sharper than the blurred drawer behind them.
-- **Icons-Only &amp; Clean Stock Fallback**: Carefully leaves Home Screen widgets untouched so your other One UI &amp; LSPosed modules keep working cleanly, and preserves the regular stock app icon intact for any unrecognised app not yet covered by Droplet.
+- **Live Convex Magnification &amp; Bevel Refraction**: Samples your live or static wallpaper at high-detail `360&times;780` with exact `mXOffset` viewport alignment, live multi-page `setWallpaperOffsets` tracking, hardware GPU bilinear filtering (`FILTER_MODE_LINEAR`), and a 1-tap center / 3-tap outer-bevel AGSL shader (`~18&times;` lighter than multi-tap shader blur).
+- **Retina-Smooth Anti-Aliased Boundaries &amp; Corner Glow**: C1-smooth cubic SDF boundary anti-aliasing (`smoothstep(0.80, -0.80, sdf)`), silky `n = 3.2` corner lighting normals, and Nyquist-safe screen-pixel specular rim widths (`&ge; 1.18px`) eliminate jagged edges and dotted corner pixels so curved corner arcs look smooth like an iPhone display.
+- **Zero-Stutter Scrolling &amp; Zero-GC Live Blur**: Double-buffered `Bitmap[2]` pools eliminate per-frame GC churn on live wallpapers, background capture pauses automatically during active touch/scroll for locked 120fps scrolling, and off-screen icons are culled.
+- **App Drawer Extra-Blur Matching**: Automatically detects One UI's blurred containers (App Drawer, Open Folders, Overlay Apps, Suggested Apps) and switches those icons to a dedicated silky-blurred backdrop texture with calibrated luminance, softer dispersion, and balanced corner rims so they blend naturally into the blurred drawer.
+- **Icons-Only &amp; Clean Stock Fallback**: Leaves Home Screen widgets untouched so your other One UI &amp; LSPosed modules keep working cleanly, and preserves the regular stock app icon intact for any unrecognised app not yet covered by Droplet.
 
-### Native Samsung One UI Companion App
-- **Automatic LSPosed Detection**: Automatically detects whether the LSPosed module is active — hides the setup guide when active, and grays out root-only sliders/toggles with a clear 3-step setup guide when inactive.
-- **Master Switch &amp; Live Sliders**:
-  - **Clarity &amp; frost**: `0%` pure crystal-clear glass (zero white wash) &harr; `100%` heavy frosted glass.
-  - **Magnification &amp; refraction**: `Subtle` &harr; `Strong` convex lens &amp; edge bend.
-  - **Corner light glow**: `Off` &harr; `Bright` specular corner highlights.
-  - **Glass tint &amp; Tint strength**: `None`, **`Auto` (wallpaper-adaptive dynamic tint)**, 9 curated glass presets (`Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Amber`, `Mint`, `Dark`), plus a **Custom RGB color picker** with live hex preview.
-- **Live Status &amp; One-Tap Restart**: Live connection status for LSPosed, One UI Home, SystemUI, and Root, plus one-tap **Restart Home** and **Restart SystemUI** buttons.
+### Simplified iOS Dark Companion App
+- **Clean Apple iOS Settings Aesthetic**: Pure OLED black canvas, inset grouped `#1C1C1E` cards (`14dp` corners), hairline dividers, iOS Segmented Control (`Glass` | `Icons`), iOS System Blue (`#0A84FF`) sliders &amp; action rows, and iOS System Green (`#30D158`) switches.
+- **Automatic LSPosed Detection**: Hides the setup guide automatically once LSPosed is active, and grays out root-only controls with a concise 3-step guide when inactive.
+- **Live Sliders &amp; Dynamic Glass Tint**:
+  - **Clarity &amp; Frost**: `0%` pure crystal-clear glass (zero white wash) &harr; `100%` heavy frosted glass.
+  - **Magnification**: `Subtle` &harr; `Strong` convex lens &amp; curved bevel refraction.
+  - **Corner Glow**: `Off` &harr; `Bright` specular corner highlights.
+  - **Glass Tint &amp; Auto-Collapsing Tint Strength**: `None`, **`Auto` (`&#x2726;` wallpaper-adaptive dynamic tint)**, 9 curated glass presets, plus a **Custom RGB color picker** with live hex preview.
+- **Live System Status &amp; One-Tap Restart**: Live connection status for LSPosed, One UI Home, and SystemUI, plus clean iOS action rows to **Restart One UI Home** and **Restart SystemUI**.
 
 ---
 

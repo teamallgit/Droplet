@@ -787,8 +787,9 @@ public final class DropletHook implements IXposedHookLoadPackage {
                             float tx = (opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f) + scrollShift * 0.22f;
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
 
-                            // Authentic iOS 26 corner-originating specular rim glow ON TOP!
-                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, getCornerGlowIntensity());
+                            // Authentic iOS 26 retina-smooth corner-originating specular rim glow ON TOP!
+                            float rimIntensity = getCornerGlowIntensity() * (isInBlurredContainer(tv) ? 0.86f : 1.0f);
+                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, rimIntensity);
                         } catch (Throwable ignored) {}
                     }
                 });
