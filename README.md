@@ -21,12 +21,12 @@
 
 <p align="center">
   <img src="assets/demo_refraction.gif" width="720" alt="Droplet Live Liquid Glass Refraction & Corner Glow" /><br/>
-  <sub><em>Real-time convex lens magnification, curved bevel RGB dispersion, and tilt-reactive corner specular glow over live &amp; static wallpapers.</em></sub>
+  <sub><em>Real-time convex lens magnification, curved bevel RGB dispersion, and tilt-reactive corner specular glow over live &amp; static wallpapers. (Requires LSPosed)</em></sub>
 </p>
 
 <p align="center">
   <img src="assets/demo_customization.gif" width="720" alt="Droplet Live Clarity to Frost and Optical Glass Tint" /><br/>
-  <sub><em>Live <strong>Clarity &amp; frost</strong> (0% pure crystal glass &harr; 100% heavy frost) and <strong>Optical Glass Tint</strong> (9 presets + Custom RGB picker) with instant 0ms updates.</em></sub>
+  <sub><em>Live <strong>Clarity &amp; frost</strong> (0% pure crystal glass &harr; 100% heavy frost) and <strong>Optical Glass Tint</strong> (9 presets + Custom RGB picker) with instant 0ms updates. (Requires LSPosed)</em></sub>
 </p>
 
 ---
