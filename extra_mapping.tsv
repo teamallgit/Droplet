@@ -1,3 +1,19 @@
+ic_abattery	ComponentInfo{me.linshen.abattery/me.linshen.abattery.MainActivity}	aBattery
+ic_lsposed	ComponentInfo{org.lsposed.manager/org.lsposed.manager.ui.activity.MainActivity}	LSPosed
+ic_kernelsu	ComponentInfo{me.weishu.kernelsu/me.weishu.kernelsu.ui.MainActivity}	KernelSU
+ic_magisk	ComponentInfo{com.topjohnwu.magisk/com.topjohnwu.magisk.ui.MainActivity}	Magisk
+ic_ambient_music	ComponentInfo{com.kieronquinn.app.pixelambientmusic/com.kieronquinn.app.pixelambientmusic.ui.activities.MainActivity}	Ambient Music
+ic_fluid_motion	ComponentInfo{dev.flexy.fluidmotion/dev.flexy.fluidmotion.MainActivity}	Fluid Motion
+ic_home_up	ComponentInfo{com.samsung.android.app.homestar/com.samsung.android.app.homestar.MainActivity}	Home Up
+ic_lockstar	ComponentInfo{com.samsung.systemui.lockstar/com.samsung.systemui.lockstar.MainActivity}	LockStar
+ic_quickstar	ComponentInfo{com.samsung.android.qstuner/com.samsung.android.qstuner.MainActivity}	QuickStar
+ic_multistar	ComponentInfo{com.samsung.android.multistar/com.samsung.android.multistar.MainActivity}	MultiStar
+ic_clockface	ComponentInfo{com.samsung.android.app.clockface/com.samsung.android.app.clockface.MainActivity}	ClockFace
+ic_shizuku	ComponentInfo{moe.shizuku.privileged.api/moe.shizuku.manager.MainActivity}	Shizuku
+ic_mt_manager	ComponentInfo{bin.mt.plus/bin.mt.plus.Main}	MT Manager
+ic_revanced	ComponentInfo{app.revanced.manager.flutter/app.revanced.manager.flutter.MainActivity}	ReVanced
+ic_gnirehtet	ComponentInfo{com.genymobile.gnirehtet/com.genymobile.gnirehtet.GnirehtetActivity}	Gnirehtet
+ic_kids_home	ComponentInfo{com.sec.android.app.kidshome/com.sec.android.app.kidshome.home.HomeActivity}	Samsung Kids
 si_netflix	ComponentInfo{com.netflix.mediaclient/com.battlenet.showguide.SplashActivity}	Netflix
 si_netflix	ComponentInfo{com.netflix.mediaclient/com.google.android.archive.ReactivateActivity}	Netflix
 si_netflix	ComponentInfo{com.netflix.mediaclient/com.netflix.mediaclient.UIWebViewActivity}	Netflix
@@ -2828,3 +2844,583 @@ si_verdaccio		Verdaccio
 si_vencord		Vencord
 si_velog		Velog
 si_velocity		Velocity
+si_vegas		VEGAS
+si_vega		Vega
+si_veepee		Veepee
+si_veed		VEED
+si_veeam		Veeam
+si_vectorworks		Vectorworks
+si_vectorlogozone		Vector Logo Zone
+si_vectary		Vectary
+si_vbulletin		vBulletin
+si_vauxhall		Vauxhall
+si_vaultwarden		Vaultwarden
+si_vapor		Vapor
+si_vanillaextract		Vanilla Extract
+si_valve		Valve
+si_vala		Vala
+si_vagrant		Vagrant
+si_vaadin		Vaadin
+si_v8		V8
+si_v2ex		V2EX
+si_v0		v0
+si_uv		uv
+si_usps		USPS
+si_uservoice		UserVoice
+si_uptimekuma		Uptime Kuma
+si_upstash		Upstash
+si_upptime		Upptime
+si_uplabs		UpLabs
+si_upcloud		UpCloud
+si_unstop		Unstop
+si_unraid		Unraid
+si_unpkg		unpkg
+si_unocss		UnoCSS
+si_unlicense		Unlicense
+si_unjs		UnJS
+si_unitednations		United Nations
+si_uniqlo_ja		Uniqlo
+si_unilever		Unilever
+si_unicode		Unicode
+si_underscoredotjs		Underscore.js
+si_uml		UML
+si_umbrel		Umbrel
+si_umbraco		Umbraco
+si_umami		Umami
+si_ulule		Ulule
+si_ultralytics		Ultralytics
+si_ukca		UKCA
+si_uipath		UiPath
+si_uikit		UIkit
+si_ufc		UFC
+si_udotsdotnews		U.S. News
+si_udacity		Udacity
+si_ubuntumate		Ubuntu MATE
+si_ubuntu		Ubuntu
+si_ublockorigin		uBlock Origin
+si_typst		Typst
+si_typo3		TYPO3
+si_typescript		TypeScript
+si_typer		Typer
+si_typeorm		TypeORM
+si_typeform		Typeform
+si_ty		ty
+si_twinmotion		Twinmotion
+si_twenty		Twenty
+si_tvtime		TV Time
+si_tv4play		TV4 Play
+si_tuxedocomputers		TUXEDO Computers
+si_turso		Turso
+si_turbosquid		TurboSquid
+si_turborepo		Turborepo
+si_turbo		Turbo
+si_tsnode		ts-node
+si_tryitonline		Try It Online
+si_tryhackme		TryHackMe
+si_trustpilot		Trustpilot
+si_trustedshops		Trusted Shops
+si_trulia		trulia
+si_trueup		TrueUp
+si_truenas		TrueNAS
+si_trpc		tRPC
+si_trove		Trove
+si_trmnl		TRMNL
+si_trivy		Trivy
+si_trino		Trino
+si_trimble		Trimble
+si_trillertv		TrillerTV
+si_triller		Triller
+si_trilium		Trilium
+si_tricentis		Tricentis
+si_treyarch		Treyarch
+si_trendmicro		Trend Micro
+si_treehouse		Treehouse
+si_traxsource		Traxsource
+si_travisci		Travis CI
+si_transportforlondon		Transport for London
+si_transportforireland		Transport for Ireland
+si_transifex		Transifex
+si_trainerroad		TrainerRoad
+si_trafficdotcv		Traffic.cv
+si_traefikproxy		Traefik Proxy
+si_traefikmesh		Traefik Mesh
+si_trae		TRAE
+si_tqdm		tqdm
+si_tplink		TP-Link
+si_tower		Tower
+si_tourbox		TourBox
+si_totvs		TOTVS
+si_toshiba		Toshiba
+si_torizon		Torizon
+si_toptal		Toptal
+si_topdotgg		Top.gg
+si_topcoder		Topcoder
+si_tomorrowland		Tomorrowland
+si_toml		TOML
+si_toll		Toll
+si_tokyometro		Tokyo Metro
+si_tokio		Tokio
+si_toggl		Toggl
+si_tmux		tmux
+si_tldraw		tldraw
+si_tinyletter		TinyLetter
+si_tinygrad		tinygrad
+si_tinkercad		Tinkercad
+si_tindie		Tindie
+si_tina		Tina
+si_timescale		Timescale
+si_tildapublishing		Tilda Publishing
+si_tietoevry		TietoEVRY
+si_tidyverse		Tidyverse
+si_tide		Tide
+si_tiddlywiki		TiddlyWiki
+si_tidb		TiDB
+si_tickettailor		Ticket Tailor
+si_thymeleaf		Thymeleaf
+si_thurgauerkantonalbank		Thurgauer Kantonalbank
+si_thunderstore		Thunderstore
+si_thumbtack		Thumbtack
+si_threedotjs		Three.js
+si_threadless		Threadless
+si_thirdweb		thirdweb
+si_thinkpad		ThinkPad
+si_things		Things
+si_thingiverse		Thingiverse
+si_thewashingtonpost		The Washington Post
+si_thestorygraph		The StoryGraph
+si_thespritersresource		The Spriters Resource
+si_thesoundsresource		The Sounds Resource
+si_theregister		The Register
+si_theplanetarysociety		The Planetary Society
+si_theodinproject		The Odin Project
+si_thenorthface		The North Face
+si_themoviedatabase		The Movie Database
+si_themodelsresource		The Models Resource
+si_themighty		The Mighty
+si_theirishtimes		The Irish Times
+si_thefinals		THE FINALS
+si_theconversation		The Conversation
+si_theboringcompany		The Boring Company
+si_thealgorithms		The Algorithms
+si_thanos		Thanos
+si_thangs		Thangs
+si_tga		TGA
+si_textual		Textual
+si_textpattern		Textpattern
+si_tether		Tether
+si_testrail		TestRail
+si_testinglibrary		Testing Library
+si_testin		Testin
+si_testcafe		TestCafe
+si_tesco		Tesco
+si_terraform		Terraform
+si_teratail		teratail
+si_teradata		Teradata
+si_tensorflow		TensorFlow
+si_tencenthy		Tencent Hy
+si_temporal		Temporal
+si_telegraph		Telegraph
+si_tele5		TELE 5
+si_tekton		Tekton
+si_teespring		Teespring
+si_teepublic		TeePublic
+si_techcrunch		TechCrunch
+si_teamcity		TeamCity
+si_teal		Teal
+si_tcs		Tata Consultancy Services
+si_taxbuzz		TaxBuzz
+si_tauri		Tauri
+si_tata		Tata
+si_tasmota		Tasmota
+si_task		Task
+si_tarteaucitron		Tarteaucitron
+si_tarom		TAROM
+si_tapas		Tapas
+si_tanstack		TanStack
+si_tangled		Tangled
+si_tampermonkey		Tampermonkey
+si_tamiya		Tamiya
+si_talos		Talos
+si_talenthouse		Talenthouse
+si_talend		Talend
+si_taketwointeractivesoftware		Take-Two Interactive Software
+si_taipy		Taipy
+si_tailwindcss		Tailwind CSS
+si_tails		Tails
+si_taichilang		Taichi Lang
+si_taichigraphics		Taichi Graphics
+si_tablecheck		TableCheck
+si_tabelog		Tabelog
+si_system76		System76
+si_synology		Synology
+si_sympy		SymPy
+si_symfony		Symfony
+si_symantec		Symantec
+si_swr		SWR
+si_swisscows		Swisscows
+si_swiper		Swiper
+si_swift		Swift
+si_swc		SWC
+si_sway		Sway
+si_swarm		Swarm
+si_swagger		Swagger
+si_svgtrace		SvgTrace
+si_svgo		SVGO
+si_svgdotjs		SVG.js
+si_svg		SVG
+si_svelte		Svelte
+si_suzuki		Suzuki
+si_suse		SUSE
+si_surveymonkey		SurveyMonkey
+si_surrealdb		SurrealDB
+si_superuser		Super User
+si_supermicro		Supermicro
+si_supercrease		Supercrease
+si_supercell		Supercell
+si_supabase		Supabase
+si_sunrise		Sunrise
+si_sumologic		Sumo Logic
+si_suitest		Suitest
+si_sui		Sui
+si_suckless		suckless
+si_subversion		Subversion
+si_subtitleedit		Subtitle Edit
+si_sublimetext		Sublime Text
+si_subaru		Subaru
+si_stylus		Stylus
+si_styleshare		StyleShare
+si_stylelint		stylelint
+si_styledcomponents		styled-components
+si_studio3t		Studio 3T
+si_stubhub		StubHub
+si_strongswan		strongSwan
+si_streamrunners		StreamRunners
+si_streamlit		Streamlit
+si_strapi		Strapi
+si_storybook		Storybook
+si_storyblok		Storyblok
+si_stopstalk		StopStalk
+si_stmicroelectronics		STMicroelectronics
+si_stimulus		Stimulus
+si_stencyl		Stencyl
+si_stencil		Stencil
+si_stellar		Stellar
+si_steinberg		Steinberg
+si_steemit		Steemit
+si_steem		Steem
+si_steelseries		Steelseries
+si_steamworks		Steamworks
+si_steamdeck		Steam Deck
+si_steamdb		SteamDB
+si_statuspal		Statuspal
+si_statuspage		Statuspage
+si_statamic		Statamic
+si_starz		STARZ
+si_startrek		Star Trek
+si_startdotgg		start.gg
+si_starship		Starship
+si_stardock		Stardock
+si_standardresume		Standard Resume
+si_standardjs		StandardJS
+si_stagetimer		Stagetimer
+si_staffbase		Staffbase
+si_stadia		Stadia
+si_stackshare		StackShare
+si_stackoverflow		Stack Overflow
+si_stackhawk		StackHawk
+si_stackedit		StackEdit
+si_stackblitz		StackBlitz
+si_stackbit		Stackbit
+si_sst		SST
+si_ssrn		SSRN
+si_srgssr		SRG SSR
+si_squarespace		Squarespace
+si_squareenix		Square Enix
+si_sqlite		SQLite
+si_sqlalchemy		SQLAlchemy
+si_spyderide		Spyder IDE
+si_springsecurity		Spring Security
+si_springboot		Spring Boot
+si_spring_creators		Spring
+si_spreadshirt		Spreadshirt
+si_spotlight		Spotlight
+si_spoj		Sphere Online Judge
+si_splunk		Splunk
+si_spinnaker		Spinnaker
+si_spine		Spine
+si_spigotmc		SpigotMC
+si_spidermonkey		SpiderMonkey
+si_sphinx		Sphinx
+si_speedypage		SpeedyPage
+si_spectrum		Spectrum
+si_speakerdeck		Speaker Deck
+si_spdx		SPDX
+si_sparkpost		SparkPost
+si_sparkfun		SparkFun
+si_sparkar		Spark AR
+si_spacy		spaCy
+si_spacex		SpaceX
+si_spaceship		Spaceship
+si_spacemacs		Spacemacs
+si_sourcetree		Sourcetree
+si_sourcehut		SourceHut
+si_sourceforge		SourceForge
+si_sourceengine		Source Engine
+si_soundcharts		Soundcharts
+si_sony		Sony
+si_sonicwall		SonicWall
+si_songoda		Songoda
+si_sonatype		Sonatype
+si_sonarqubeserver		SonarQube Server
+si_sonarqubeforide		SonarQube for IDE
+si_sonarqubecloud		SonarQube Cloud
+si_sonar		Sonar
+si_solveddotac		solved.ac
+si_solus		Solus
+si_solidity		Solidity
+si_solid		Solid
+si_solana		Solana
+si_sogou		Sogou
+si_softpedia		Softpedia
+si_socketdotio		Socket.io
+si_socket		Socket
+si_society6		Society6
+si_socialblade		Social Blade
+si_snyk		Snyk
+si_snowpack		Snowpack
+si_snowflake		Snowflake
+si_snort		Snort
+si_sncf		SNCF
+si_snapdragon		Snapdragon
+si_snapcraft		Snapcraft
+si_smugmug		SmugMug
+si_smrt		SMRT
+si_smoothcomp		Smoothcomp
+si_smashingmagazine		Smashing Magazine
+si_slint		Slint
+si_slideshare		SlideShare
+si_slides		Slides
+si_slickpic		SlickPic
+si_slashdot		Slashdot
+si_slackware		Slackware
+si_skypack		Skypack
+si_sky		Sky
+si_sketchup		SketchUp
+si_sketchfab		Sketchfab
+si_sketch		Sketch
+si_skeleton		Skeleton
+si_skaffold		Skaffold
+si_sitepoint		SitePoint
+si_sitecore		Sitecore
+si_singlestore		SingleStore
+si_singaporeairlines		Singapore Airlines
+si_sinaweibo		Sina Weibo
+si_simplelocalize		SimpleLocalize
+si_simpleiconscdn		Simple Icons CDN
+si_simpleicons		Simple Icons
+si_simpleanalytics		Simple Analytics
+si_simkl		Simkl
+si_similarweb		Similarweb
+si_silverairways		Silver Airways
+si_sifive		SiFive
+si_siemens		Siemens
+si_sidekiq		Sidekiq
+si_showwcase		Showwcase
+si_showtime		Showtime
+si_showpad		Showpad
+si_shortcut		Shortcut
+si_shopware		Shopware
+si_shieldsdotio		Shields.io
+si_shenzhenmetro		Shenzhen Metro
+si_shelly		Shelly
+si_sharp		sharp
+si_sharex		ShareX
+si_shanghaimetro		Shanghai Metro
+si_shadow		Shadow
+si_shadcnui		shadcn/ui
+si_sfml		SFML
+si_setuptools		Setuptools
+si_setapp		Setapp
+si_sessionize		Sessionize
+si_serverless		Serverless
+si_serverfault		Server Fault
+si_servbay		ServBay
+si_sequelize		Sequelize
+si_sepa		SEPA
+si_sentry		Sentry
+si_sensu		Sensu
+si_sennheiser		Sennheiser
+si_sencha		Sencha
+si_semver		SemVer
+si_semrush		Semrush
+si_semaphoreci		Semaphore CI
+si_semanticweb		Semantic Web
+si_semanticuireact		Semantic UI React
+si_semanticui		Semantic UI
+si_semanticscholar		Semantic Scholar
+si_semanticrelease		semantic-release
+si_sellfy		Sellfy
+si_selenium		Selenium
+si_sega		Sega
+si_sefaria		Sefaria
+si_securityscorecard		SecurityScorecard
+si_seatgeek		SeatGeek
+si_seat		SEAT
+si_searxng		SearXNG
+si_seagate		Seagate
+si_seafile		Seafile
+si_scylladb		ScyllaDB
+si_scrutinizerci		Scrutinizer CI
+si_scrumalliance		Scrum Alliance
+si_scrollreveal		ScrollReveal
+si_scrimba		Scrimba
+si_screencastify		Screencastify
+si_scratch		Scratch
+si_scrapy		Scrapy
+si_scrapbox		Scrapbox
+si_scpfoundation		SCP Foundation
+si_scopus		Scopus
+si_scipy		SciPy
+si_scilab		Scilab
+si_scikitlearn		scikit-learn
+si_schneiderelectric		Schneider Electric
+si_scania		Scania
+si_scaleway		Scaleway
+si_scalar		Scalar
+si_scala		Scala
+si_saudia		Saudia
+si_saucelabs		Sauce Labs
+si_saturn		Saturn
+si_sat1		Sat.1
+si_sass		Sass
+si_sartorius		Sartorius
+si_sap		SAP
+si_sanity		Sanity
+si_sanic		Sanic
+si_sanfranciscomunicipalrailway		San Francisco Municipal Railway
+si_samsungpay		Samsung Pay
+si_saltproject		Salt Project
+si_salla		Salla
+si_sailsdotjs		Sails.js
+si_sailfishos		Sailfish OS
+si_sagemath		SageMath
+si_sage		Sage
+si_safari		Safari
+si_sabanci		Sabanci
+si_s7airlines		S7 Airlines
+si_rye		Rye
+si_rxdb		RxDB
+si_rustfs		RustFS
+si_rust		Rust
+si_runrundotit		Runrun.it
+si_runkit		RunKit
+si_runkeeper		Runkeeper
+si_rundeck		Rundeck
+si_rumahweb		Rumahweb
+si_ruff		Ruff
+si_rubysinatra		Ruby Sinatra
+si_rubyonrails		Ruby on Rails
+si_rubymine		RubyMine
+si_rubygems		RubyGems
+si_ruby		Ruby
+si_rubocop		RuboCop
+si_rtm		RTM
+si_rtlzwei		RTLZWEI
+si_rstudioide		RStudio IDE
+si_rss		RSS
+si_rsocket		RSocket
+si_roundcube		Roundcube
+si_rottentomatoes		Rotten Tomatoes
+si_rotaryinternational		Rotary International
+si_ros		ROS
+si_rootssage		Roots Sage
+si_rootsbedrock		Roots Bedrock
+si_roots		Roots
+si_rootme		Root Me
+si_root		ROOT
+si_roon		Roon
+si_rook		Rook
+si_rollupdotjs		rollup.js
+si_rollsroyce		Rolls-Royce
+si_rolldown		Rolldown
+si_rollbar		Rollbar
+si_rockylinux		Rocky Linux
+si_rockwellautomation		Rockwell Automation
+si_rockstargames		Rockstar Games
+si_rocksdb		RocksDB
+si_robotframework		Robot Framework
+si_roboflow		Roboflow
+si_robloxstudio		Roblox Studio
+si_roamresearch		Roam Research
+si_roadmapdotsh		roadmap.sh
+si_rive		Rive
+si_ritzcarlton		Ritz Carlton
+si_riseup		Riseup
+si_riscv		RISC-V
+si_rime		Rime
+si_rimacautomobili		Rimac Automobili
+si_rich		Rich
+si_rhinoceros		Rhinoceros
+si_rezgo		Rezgo
+si_reverbnation		ReverbNation
+si_revenuecat		RevenueCat
+si_revealdotjs		reveal.js
+si_revanced		ReVanced
+si_retropie		RetroPie
+si_retroachievements		Retro Achievements
+si_retool		Retool
+si_resurrectionremixos		Resurrection Remix OS
+si_resharper		ReSharper
+si_resend		Resend
+si_researchgate		ResearchGate
+si_rescuetime		RescueTime
+si_rescript		ReScript
+si_republicofgamers		Republic of Gamers
+si_replicate		Replicate
+si_renren		Renren
+si_renpy		Ren'Py
+si_renovate		Renovate
+si_render		Render
+si_renault		Renault
+si_remix		Remix
+si_remedyentertainment		Remedy Entertainment
+si_remark		remark
+si_relianceindustrieslimited		Reliance Industries Limited
+si_rekaui		Reka UI
+si_reflex		Reflex
+si_refinedgithub		Refined GitHub
+si_refine		Refine
+si_reebok		Reebok
+si_redwoodjs		RedwoodJS
+si_reduxsaga		Redux-Saga
+si_redux		Redux
+si_redsys		Redsys
+si_redragon		Redragon
+si_redox		Redox
+si_redmine		Redmine
+si_redis		Redis
+si_redhatopenshift		Red Hat Open Shift
+si_redhat		Red Hat
+si_redcandlegames		Red Candle Games
+si_redbull		Red Bull
+si_redash		Redash
+si_red		Red
+si_recoil		Recoil
+si_reasonstudios		Reason Studios
+si_reason		Reason
+si_readthedocs		Read the Docs
+si_readme		ReadMe
+si_readdotcv		Read.cv
+si_reacttable		React Table
+si_reactrouter		React Router
+si_reactquery		React Query
+si_reactos		ReactOS
+si_reactivex		ReactiveX
+si_reactiveresume		Reactive Resume
+si_reacthookform		React Hook Form
+si_reactbootstrap		React Bootstrap
+si_react		React
+si_rclone		Rclone
+si_razorpay		Razorpay
+si_raylib		Raylib
+si_raycast		Raycast

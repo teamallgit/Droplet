@@ -25,6 +25,8 @@ public final class ModuleStatus {
     public static final String KEY_GLOW_AMOUNT = "opt_glow_amount";
     public static final String KEY_TINT_COLOR = "opt_tint_color";
     public static final String KEY_TINT_STRENGTH = "opt_tint_strength";
+    // Sentinel color value for Wallpaper-Adaptive Auto Tint (distinct from 0=None and 0xFFxxxxxx=manual RGB)
+    public static final int TINT_COLOR_AUTO = 0x01000000;
     // Legacy fallback key
     public static final String KEY_REFRACTION_LEVEL = "opt_refraction_level";
 
@@ -42,7 +44,7 @@ public final class ModuleStatus {
     }
 
     public static String getModuleVersion() {
-        return "2.6.0";
+        return "2.7.0";
     }
 
     public static int getOneUiVersionInt() {

@@ -644,10 +644,11 @@ public class MainActivity extends Activity {
     }
 
     private static final String[] TINT_NAMES = {
-            "None", "Blue", "Cyan", "Indigo", "Purple", "Pink", "Red", "Amber", "Mint", "Dark"
+            "None", "Auto (Wallpaper)", "Blue", "Cyan", "Indigo", "Purple", "Pink", "Red", "Amber", "Mint", "Dark"
     };
     private static final int[] TINT_COLORS = {
             0,
+            ModuleStatus.TINT_COLOR_AUTO,
             Color.parseColor("#3B82F6"),
             Color.parseColor("#06B6D4"),
             Color.parseColor("#6366F1"),
@@ -695,8 +696,9 @@ public class MainActivity extends Activity {
             TextView dot = new TextView(this);
             dot.setGravity(Gravity.CENTER);
             dot.setTextSize(13f);
-            dot.setTextColor(COL_TEXT_SEC);
+            dot.setTextColor(col == ModuleStatus.TINT_COLOR_AUTO ? Color.WHITE : COL_TEXT_SEC);
             if (col == 0) dot.setText("✕");
+            else if (col == ModuleStatus.TINT_COLOR_AUTO) dot.setText("✦");
             dot.setTag(col);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(34), dp(34));
             lp.rightMargin = dp(10);
@@ -761,6 +763,14 @@ public class MainActivity extends Activity {
                 bg.setColor(isCustom ? cur : Color.parseColor("#2E2E34"));
                 bg.setStroke(dp(isCustom ? 3 : 1), isCustom ? Color.WHITE : Color.parseColor("#55555E"));
                 v.setBackground(bg);
+            } else if (tag == ModuleStatus.TINT_COLOR_AUTO) {
+                boolean sel = (tag == cur);
+                GradientDrawable bg = new GradientDrawable(
+                        GradientDrawable.Orientation.TL_BR,
+                        new int[] { Color.parseColor("#3B82F6"), Color.parseColor("#A855F7"), Color.parseColor("#06B6D4") });
+                bg.setShape(GradientDrawable.OVAL);
+                bg.setStroke(dp(sel ? 3 : 1), sel ? Color.WHITE : Color.parseColor("#66FFFFFF"));
+                v.setBackground(bg);
             } else {
                 boolean sel = (tag == cur);
                 GradientDrawable bg = new GradientDrawable();
@@ -774,7 +784,7 @@ public class MainActivity extends Activity {
 
     private void showCustomTintDialog() {
         int cur = prefs.getInt(ModuleStatus.KEY_TINT_COLOR, 0);
-        if (cur == 0) cur = Color.parseColor("#3B82F6");
+        if (cur == 0 || cur == ModuleStatus.TINT_COLOR_AUTO) cur = Color.parseColor("#3B82F6");
         final int[] rgb = new int[] { Color.red(cur), Color.green(cur), Color.blue(cur) };
 
         LinearLayout box = new LinearLayout(this);

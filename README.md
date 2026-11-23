@@ -11,7 +11,7 @@
 <p align="center">
   <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/teamallgit/Droplet?style=flat-square&color=3E8BFF&label=Download" alt="Latest Release" /></a>
   <img src="https://img.shields.io/badge/One%20UI-8%20%7C%208.5%20%7C%209%2B-1C1C1E?style=flat-square" alt="One UI 8 / 8.5 / 9+" />
-  <img src="https://img.shields.io/badge/Icons-1%2C020%2B-1C1C1E?style=flat-square" alt="1,020+ Icons" />
+  <img src="https://img.shields.io/badge/Icons-1%2C600%2B-1C1C1E?style=flat-square" alt="1,600+ Icons" />
   <img src="https://img.shields.io/badge/Root-Optional-34D399?style=flat-square" alt="Root Optional" />
 </p>
 
@@ -33,11 +33,11 @@
 
 ## Two Ways to Use Droplet
 
-Everything ships inside a single **`Droplet.apk`**. No-root users get the full 1,020+ icon pack immediately; rooted users with LSPosed unlock live GPU optical glass effects and real-time sliders.
+Everything ships inside a single **`Droplet.apk`**. No-root users get the full 1,600+ icon pack immediately; rooted users with LSPosed unlock live GPU optical glass effects and real-time sliders.
 
 | Capability | No Root (Theme Park) | Root + LSPosed Module |
 | :--- | :---: | :---: |
-| **1,020+ solid-filled iOS 26 Clear Liquid Glass icons** (`2,700+` app mappings) | &#x2705; | &#x2705; |
+| **1,600+ solid-filled iOS 26 Clear Liquid Glass icons** (`3,500+` app mappings) | &#x2705; | &#x2705; |
 | **Apple continuous-squircle geometry** (`n = 4.50`) &amp; translucent frosted glyphs | &#x2705; | &#x2705; |
 | **Live 120fps GPU wallpaper magnification &amp; curved bevel refraction** | &mdash; | &#x2705; |
 | **Gyroscope tilt-reactive corner specular glow** | &mdash; | &#x2705; |
@@ -54,7 +54,7 @@ Everything ships inside a single **`Droplet.apk`**. No-root users get the full 1
 - **Zero-Stutter Scrolling &amp; Viewport Culling**: Pauses background wallpaper capture during active touch/scroll so Home Screen and App Drawer scrolling stays locked at 120fps, and skips off-screen icons during redraws and tilt updates.
 - **Corner-Originating Specular Glow**: Quiet optical hairline along straight edges with bright liquid-glass specular arcs originating strictly from the 45&deg; curved corners (`-135&deg;` top-left &amp; `+45&deg;` bottom-right) that shift naturally as you tilt your phone.
 - **App Drawer Extra-Blur Matching**: Automatically detects One UI's blurred containers (App Drawer, Open Folders, Overlay Apps, Suggested Apps) and switches those icons to a dedicated silky-blurred backdrop texture so they blend seamlessly instead of looking sharper than the blurred drawer behind them.
-- **Icons-Only Scope**: Carefully leaves Home Screen widgets untouched so your other One UI &amp; LSPosed modules keep working cleanly.
+- **Icons-Only &amp; Clean Stock Fallback**: Carefully leaves Home Screen widgets untouched so your other One UI &amp; LSPosed modules keep working cleanly, and preserves the regular stock app icon intact for any unrecognised app not yet covered by Droplet.
 
 ### Native Samsung One UI Companion App
 - **Automatic LSPosed Detection**: Automatically detects whether the LSPosed module is active — hides the setup guide when active, and grays out root-only sliders/toggles with a clear 3-step setup guide when inactive.
@@ -62,14 +62,14 @@ Everything ships inside a single **`Droplet.apk`**. No-root users get the full 1
   - **Clarity &amp; frost**: `0%` pure crystal-clear glass (zero white wash) &harr; `100%` heavy frosted glass.
   - **Magnification &amp; refraction**: `Subtle` &harr; `Strong` convex lens &amp; edge bend.
   - **Corner light glow**: `Off` &harr; `Bright` specular corner highlights.
-  - **Glass tint &amp; Tint strength**: `None`, 9 curated glass presets (`Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Amber`, `Mint`, `Dark`), plus a **Custom RGB color picker** with live hex preview.
+  - **Glass tint &amp; Tint strength**: `None`, **`Auto` (wallpaper-adaptive dynamic tint)**, 9 curated glass presets (`Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Amber`, `Mint`, `Dark`), plus a **Custom RGB color picker** with live hex preview.
 - **Live Status &amp; One-Tap Restart**: Live connection status for LSPosed, One UI Home, SystemUI, and Root, plus one-tap **Restart Home** and **Restart SystemUI** buttons.
 
 ---
 
 ## Icon Pack Preview
 
-*120 of 1,020+ solid-filled iOS 26 Clear Liquid Glass icons:*
+*120 of 1,600+ solid-filled iOS 26 Clear Liquid Glass icons:*
 
 | Core &amp; Popular | Apps &amp; Services |
 | :---: | :---: |
