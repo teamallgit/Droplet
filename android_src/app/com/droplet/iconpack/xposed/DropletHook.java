@@ -2,6 +2,7 @@ package com.droplet.iconpack.xposed;
 
 import android.app.Activity;
 import android.app.Application;
+import android.app.WallpaperManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -644,6 +645,19 @@ public final class DropletHook implements IXposedHookLoadPackage {
                 invalidateVisibleIcons();
             }
         });
+
+        // Track One UI Home's exact live wallpaper scroll offset (mWallpaperX/Y) for 1:1 parallax alignment!
+        try {
+            XposedBridge.hookAllMethods(WallpaperManager.class, "setWallpaperOffsets", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.args != null && param.args.length >= 3
+                            && param.args[1] instanceof Float && param.args[2] instanceof Float) {
+                        LiquidGlassRuntime.setWallpaperOffsets((Float) param.args[1], (Float) param.args[2]);
+                    }
+                }
+            });
+        } catch (Throwable ignored) {}
 
         // Wake live wallpaper refraction immediately whenever LauncherActivity resumes (e.g., swiping up from an app!)
         try {

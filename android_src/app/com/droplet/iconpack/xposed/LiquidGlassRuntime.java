@@ -53,10 +53,10 @@ public final class LiquidGlassRuntime {
 
     private static final String TAG = "Droplet-Glass: ";
 
-    // Crisp 1/4-res Home texture (270x585 -> ~2.5ms background blur + GPU FILTER_MODE_LINEAR = zero pixelation!)
+    // High-detail 1/3-res Home texture (360x780 + GPU FILTER_MODE_LINEAR = crisp background details, zero pixelation!)
     // + ultra-silky 90x195 2-pass blurred App Drawer texture (~0.3ms + FILTER_MODE_LINEAR = ~140px smooth Gaussian!)
-    private static final int CAP_W = 270;
-    private static final int CAP_H = 585;
+    private static final int CAP_W = 360;
+    private static final int CAP_H = 780;
     private static final int DRAWER_W = 90;
     private static final int DRAWER_H = 195;
 
@@ -298,6 +298,9 @@ public final class LiquidGlassRuntime {
     private static volatile int sLastWallpaperId = -1;
     private static volatile boolean sUsedFallbackCapture = false;
     private static volatile boolean sForceRecapture = false;
+    // Live One UI wallpaper scroll offsets (default 0.5 = centered, matching ImageWallpaper mWallpaperX/Y!)
+    private static volatile float sWallOffsetX = 0.5f;
+    private static volatile float sWallOffsetY = 0.5f;
     // Wallpaper-adaptive Auto Tint RGB in [0..1] (computed in <0.1ms per captured frame!)
     private static volatile float sAutoTintR = 0.24f;
     private static volatile float sAutoTintG = 0.54f;
@@ -411,6 +414,19 @@ public final class LiquidGlassRuntime {
         sLastMotionMs = System.currentTimeMillis();
     }
 
+    public static void setWallpaperOffsets(float xOff, float yOff) {
+        float cx = Math.max(0f, Math.min(1f, xOff));
+        float cy = Math.max(0f, Math.min(1f, yOff));
+        if (Math.abs(cx - sWallOffsetX) > 0.015f || Math.abs(cy - sWallOffsetY) > 0.015f) {
+            sWallOffsetX = cx;
+            sWallOffsetY = cy;
+            if (!sIsLiveWallpaper) {
+                sForceRecapture = true;
+                kickLiveCaptureIfNeeded();
+            }
+        }
+    }
+
     public static void setFrostLevel(float frost01) {
         float clamped = Math.max(0f, Math.min(1f, frost01));
         if (Math.abs(clamped - sCurrentFrost) < 0.01f) return;
@@ -424,9 +440,9 @@ public final class LiquidGlassRuntime {
     }
 
     private static int frostToBlurRadius(float frost01) {
-        // 0% -> 0px (pure crystal-clear glass lens!), 100% -> 14px 2-pass (~85px heavy frosted glass!)
+        // 0% -> 0px (pure crystal-clear glass lens!), 100% -> 18px 2-pass (~85px heavy frosted glass on 360x780!)
         if (frost01 <= 0.06f) return 0;
-        return Math.max(1, Math.min(14, Math.round(frost01 * 14.0f)));
+        return Math.max(1, Math.min(18, Math.round(frost01 * 18.0f)));
     }
 
     private static BitmapShader makeLinearShader(Bitmap bmp) {
@@ -683,18 +699,101 @@ public final class LiquidGlassRuntime {
         return nonDark >= 2;
     }
 
+    /**
+     * Aspect-ratio-preserving crop & scale from any raw wallpaper bitmap into CAP_W x CAP_H
+     * using live sWallOffsetX / sWallOffsetY (default 0.5 centered), preventing horizontal squashing
+     * or mXOffset misalignment on wide/parallax wallpapers!
+     */
+    private static Bitmap cropAndScaleToViewport(Bitmap raw, int sw, int sh) {
+        Bitmap src = raw;
+        boolean recycleSrc = false;
+        if (Build.VERSION.SDK_INT >= 26 && raw.getConfig() == Bitmap.Config.HARDWARE) {
+            src = raw.copy(Bitmap.Config.ARGB_8888, false);
+            recycleSrc = (src != null && src != raw);
+        }
+        if (src == null) return null;
+        int rw = src.getWidth(), rh = src.getHeight();
+        if (rw <= 0 || rh <= 0) {
+            if (recycleSrc) src.recycle();
+            return null;
+        }
+        float targetAspect = sw / (float) sh;
+        float rawAspect = rw / (float) rh;
+        Rect srcRect;
+        if (rawAspect > targetAspect + 0.015f) {
+            int cropW = Math.max(1, Math.round(rh * targetAspect));
+            int cropX = Math.max(0, Math.min(rw - cropW, Math.round((rw - cropW) * sWallOffsetX)));
+            srcRect = new Rect(cropX, 0, cropX + cropW, rh);
+        } else if (rawAspect < targetAspect - 0.015f) {
+            int cropH = Math.max(1, Math.round(rw / targetAspect));
+            int cropY = Math.max(0, Math.min(rh - cropH, Math.round((rh - cropH) * sWallOffsetY)));
+            srcRect = new Rect(0, cropY, rw, cropY + cropH);
+        } else {
+            srcRect = new Rect(0, 0, rw, rh);
+        }
+        Bitmap out = Bitmap.createBitmap(CAP_W, CAP_H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(out);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        c.drawBitmap(src, srcRect, new Rect(0, 0, CAP_W, CAP_H), p);
+        if (recycleSrc) src.recycle();
+        return out;
+    }
+
     private static Bitmap captureSmallSoftwareFrame(Context ctx, int sw, int sh) {
         initCaptureReflection();
         long t0 = System.nanoTime();
         String methodUsed = null;
         Bitmap raw = null;
+        int origW = 0, origH = 0;
 
-        // Path 1: IWindowManager.screenshotWallpaper() (exact 1:1 display-aligned viewport!)
-        if (sWmService != null && sScreenshotWallMethod != null) {
+        boolean isLive = false;
+        try {
+            WallpaperManager wm = WallpaperManager.getInstance(ctx);
+            isLive = (wm.getWallpaperInfo() != null);
+        } catch (Throwable ignored) {}
+
+        // For STATIC wallpapers (ImageWallpaper): ALWAYS use WallpaperManager.getDrawable() FIRST!
+        // Reason: IWindowManager.screenshotWallpaper() on Samsung One UI captures ImageWallpaper's raw
+        // wider surface (e.g. 1476x2340) at x=0 without mXOffset (-198px), shifting icons by a full column!
+        // WallpaperManager.getDrawable() + exact sWallOffsetX/Y crop aligns 100.0% pixel-for-pixel!
+        if (!isLive) {
+            try {
+                WallpaperManager wm = WallpaperManager.getInstance(ctx);
+                Drawable wd = wm.getDrawable();
+                if (wd != null) {
+                    int dw = wd.getIntrinsicWidth(), dh = wd.getIntrinsicHeight();
+                    origW = dw; origH = dh;
+                    Bitmap b = Bitmap.createBitmap(CAP_W, CAP_H, Bitmap.Config.ARGB_8888);
+                    Canvas c = new Canvas(b);
+                    if (dw > 0 && dh > 0) {
+                        float s = Math.max(CAP_W / (float) dw, CAP_H / (float) dh);
+                        int rw = Math.round(dw * s), rh = Math.round(dh * s);
+                        int ox = -Math.round((rw - CAP_W) * sWallOffsetX);
+                        int oy = -Math.round((rh - CAP_H) * sWallOffsetY);
+                        wd.setBounds(ox, oy, ox + rw, oy + rh);
+                    } else {
+                        wd.setBounds(0, 0, CAP_W, CAP_H);
+                    }
+                    wd.draw(c);
+                    if (isBitmapNonBlack(b)) {
+                        raw = b;
+                        methodUsed = "WallpaperManager.getDrawable(exact-offset)";
+                        sUsedFallbackCapture = false;
+                    } else {
+                        b.recycle();
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // For LIVE wallpapers (or if static drawable unavailable): IWindowManager.screenshotWallpaper()
+        if (raw == null && sWmService != null && sScreenshotWallMethod != null) {
             try {
                 Object bObj = sScreenshotWallMethod.invoke(sWmService);
                 if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
-                    raw = (Bitmap) bObj;
+                    Bitmap bm = (Bitmap) bObj;
+                    origW = bm.getWidth(); origH = bm.getHeight();
+                    raw = cropAndScaleToViewport(bm, sw, sh);
                     methodUsed = "IWindowManager.screenshotWallpaper";
                     sUsedFallbackCapture = false;
                 }
@@ -703,37 +802,7 @@ public final class LiquidGlassRuntime {
             }
         }
 
-        // Path 2: Static WallpaperManager.getDrawable() (exact center-crop to display aspect ratio!)
-        if (raw == null) {
-            try {
-                WallpaperManager wm = WallpaperManager.getInstance(ctx);
-                if (wm.getWallpaperInfo() == null) {
-                    Drawable wd = wm.getDrawable();
-                    if (wd != null) {
-                        Bitmap b = Bitmap.createBitmap(CAP_W, CAP_H, Bitmap.Config.ARGB_8888);
-                        Canvas c = new Canvas(b);
-                        int dw = wd.getIntrinsicWidth(), dh = wd.getIntrinsicHeight();
-                        if (dw > 0 && dh > 0) {
-                            float s = Math.max(CAP_W / (float) dw, CAP_H / (float) dh);
-                            int rw = Math.round(dw * s), rh = Math.round(dh * s);
-                            wd.setBounds((CAP_W - rw) / 2, (CAP_H - rh) / 2, (CAP_W + rw) / 2, (CAP_H + rh) / 2);
-                        } else {
-                            wd.setBounds(0, 0, CAP_W, CAP_H);
-                        }
-                        wd.draw(c);
-                        if (isBitmapNonBlack(b)) {
-                            raw = b;
-                            methodUsed = "WallpaperManager.getDrawable";
-                            sUsedFallbackCapture = false;
-                        } else {
-                            b.recycle();
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // Path 3 (last-resort fallback only): mirrorWallpaperSurface(0) + captureLayers (full bounds, no zoomed crop!)
+        // Last-resort fallback: mirrorWallpaperSurface(0) + captureLayers
         if (raw == null && sWmService != null && sMirrorWallMethod != null && sCaptureLayersMethod != null) {
             try {
                 if (sMirrorSc == null || !sMirrorSc.isValid()) {
@@ -743,14 +812,16 @@ public final class LiquidGlassRuntime {
                     }
                 }
                 if (sMirrorSc != null && sMirrorSc.isValid()) {
-                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, null, 0.25f);
+                    Object shb = sCaptureLayersMethod.invoke(null, sMirrorSc, null, 0.30f);
                     if (shb != null) {
                         if (sHwBufAsBitmapMethod == null) {
                             sHwBufAsBitmapMethod = shb.getClass().getMethod("asBitmap");
                         }
                         Object bObj = sHwBufAsBitmapMethod.invoke(shb);
                         if (bObj instanceof Bitmap && isBitmapNonBlack((Bitmap) bObj)) {
-                            raw = (Bitmap) bObj;
+                            Bitmap bm = (Bitmap) bObj;
+                            origW = bm.getWidth(); origH = bm.getHeight();
+                            raw = cropAndScaleToViewport(bm, sw, sh);
                             methodUsed = "mirrorWallpaperSurface+captureLayers";
                             sUsedFallbackCapture = true;
                         }
@@ -761,25 +832,14 @@ public final class LiquidGlassRuntime {
 
         if (raw == null) return null;
 
-        // Convert to tiny 144x312 software ARGB_8888 for <1.2ms pre-blur (zero GPU 27-tap stall!)
-        Bitmap small;
-        if (Build.VERSION.SDK_INT >= 26 && raw.getConfig() == Bitmap.Config.HARDWARE) {
-            Bitmap soft = raw.copy(Bitmap.Config.ARGB_8888, false);
-            small = Bitmap.createScaledBitmap(soft, CAP_W, CAP_H, true);
-            if (soft != null && soft != small) soft.recycle();
-        } else if (raw.getWidth() != CAP_W || raw.getHeight() != CAP_H) {
-            small = Bitmap.createScaledBitmap(raw, CAP_W, CAP_H, true);
-        } else {
-            small = raw;
-        }
-
         if (!sCaptureLoggedOnce) {
             sCaptureLoggedOnce = true;
             long ms = (System.nanoTime() - t0) / 1_000_000L;
-            XposedBridge.log(TAG + "Optimized pre-blurred live texture acquired via " + methodUsed
-                    + " (" + small.getWidth() + "x" + small.getHeight() + ", " + ms + "ms)");
+            XposedBridge.log(TAG + "Exact-aligned live texture via " + methodUsed
+                    + " (src=" + origW + "x" + origH + " -> " + raw.getWidth() + "x" + raw.getHeight()
+                    + ", offX=" + sWallOffsetX + ", " + ms + "ms)");
         }
-        return small;
+        return raw;
     }
 
     private static final Runnable sCaptureTick = new Runnable() {
