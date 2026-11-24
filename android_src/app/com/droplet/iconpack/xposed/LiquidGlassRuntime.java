@@ -55,13 +55,13 @@ public final class LiquidGlassRuntime {
 
     // High-detail 1/3-res Static Home texture (360x780, captured once -> 0% ongoing CPU!)
     // + fast 216x468 animated Live Wallpaper texture (~30fps smooth!)
-    // + ultra-silky 90x195 2-pass blurred App Drawer texture (~0.3ms + FILTER_MODE_LINEAR = ~140px smooth Gaussian!)
+    // + true-Gaussian 108x234 3-pass blurred App Drawer texture (~0.6ms + FILTER_MODE_LINEAR -> zero banding!)
     private static final int CAP_W = 360;
     private static final int CAP_H = 780;
     private static final int LIVE_CAP_W = 216;
     private static final int LIVE_CAP_H = 468;
-    private static final int DRAWER_W = 90;
-    private static final int DRAWER_H = 195;
+    private static final int DRAWER_W = 108;
+    private static final int DRAWER_H = 234;
 
     public static final class PureGlyphDrawable extends BitmapDrawable {
         public PureGlyphDrawable(Resources res, Bitmap bitmap) {
@@ -78,6 +78,7 @@ public final class LiquidGlassRuntime {
         "uniform shader uWallpaper;\n" +
         "uniform float2 uSize;\n" +
         "uniform float2 uScreenPos;\n" +
+        "uniform float2 uViewScale;\n" +
         "uniform float2 uWallScale;\n" +
         "uniform float2 uTilt;\n" +
         "uniform float uStrength;\n" +
@@ -118,27 +119,28 @@ public final class LiquidGlassRuntime {
         "    float2 norm = squircleNormal(p, b, 3.6);\n" +
         "\n" +
         "    // 1. REAL CONVEX LENS MAGNIFICATION (controlled live by Magnification slider!)\n" +
-        "    float effStr = uStrength * mix(1.0, 0.48, uDrawerMode);\n" +
-        "    float zoomFrac = clamp(0.56 * effStr, 0.14, 0.74);\n" +
+        "    float effStr = uStrength * mix(1.0, 0.42, uDrawerMode);\n" +
+        "    float zoomFrac = clamp(0.56 * effStr, 0.12, 0.74);\n" +
         "    float2 pn = p / max(halfSize, float2(1.0));\n" +
         "    float r2 = clamp(dot(pn, pn), 0.0, 1.4);\n" +
         "    float2 magOffset = -p * (zoomFrac * (1.0 - 0.14 * r2));\n" +
         "\n" +
-        "    // 2. CURVED OUTER 16% GLASS BEVEL REFRACTION + GYRO PARALLAX\n" +
+        "    // 2. CURVED OUTER 16% GLASS BEVEL REFRACTION + GYRO PARALLAX (view-scale aware for app-close spring!)\n" +
         "    float edgeT = smoothstep(minSide * 0.165, 0.0, dIn);\n" +
         "    float edgePow = edgeT * edgeT;\n" +
         "    float2 rimBend = norm * (minSide * 0.25 * effStr * edgePow);\n" +
         "    float2 tiltShift = uTilt * (minSide * 0.10 * effStr);\n" +
         "\n" +
-        "    float2 baseScreen = uScreenPos + fragCoord + magOffset + rimBend + tiltShift;\n" +
+        "    float2 baseScreen = uScreenPos + (fragCoord + magOffset + rimBend + tiltShift) * uViewScale;\n" +
         "\n" +
         "    // ULTRA-FAST TEXTURE SAMPLING: 1 tap in interior, 3 taps ONLY on curved bevel for RGB prism!\n" +
         "    half3 col;\n" +
         "    if (edgeT > 0.02 && uStrength > 0.15) {\n" +
-        "        float dispPx = minSide * 0.026 * effStr * edgePow * mix(1.0, 0.45, uDrawerMode);\n" +
-        "        half rCh = uWallpaper.eval((baseScreen + norm * dispPx) * uWallScale).r;\n" +
+        "        float dispPx = minSide * 0.026 * effStr * edgePow * mix(1.0, 0.42, uDrawerMode);\n" +
+        "        float2 dispVec = norm * dispPx * uViewScale;\n" +
+        "        half rCh = uWallpaper.eval((baseScreen + dispVec) * uWallScale).r;\n" +
         "        half gCh = uWallpaper.eval(baseScreen * uWallScale).g;\n" +
-        "        half bCh = uWallpaper.eval((baseScreen - norm * dispPx) * uWallScale).b;\n" +
+        "        half bCh = uWallpaper.eval((baseScreen - dispVec) * uWallScale).b;\n" +
         "        col = half3(rCh, gCh, bCh);\n" +
         "    } else {\n" +
         "        col = uWallpaper.eval(baseScreen * uWallScale).rgb;\n" +
@@ -146,18 +148,20 @@ public final class LiquidGlassRuntime {
         "\n" +
         "    // Vivid curved-edge color refraction glow + adaptive bright-wallpaper legibility balance\n" +
         "    half luma = dot(col, half3(0.299, 0.587, 0.114));\n" +
-        "    col = mix(half3(luma), col, half(1.04 + 0.22 * edgePow * mix(1.0, 0.5, uDrawerMode)));\n" +
+        "    col = mix(half3(luma), col, half(mix(1.04, 0.96, uDrawerMode) + 0.22 * edgePow * mix(1.0, 0.45, uDrawerMode)));\n" +
         "    float brightClamp = smoothstep(0.58, 0.92, float(luma));\n" +
         "    col *= half(1.0 - 0.10 * brightClamp);\n" +
         "\n" +
         "    // Live Clear (0% = pure crystal glass, ZERO white wash!) <-> Frosted (100% = heavy frosted glass!)\n" +
+        "    // Refined App Drawer optics: subtle tactile meniscus + clean top sheen so drawer icons look like Apple App Library glass!\n" +
         "    float edgeMeniscus = exp(-d512 / 16.0);\n" +
         "    float topCatch = pow(clamp((1.0 - pn.y) * 0.5, 0.0, 1.0), 1.15);\n" +
         "    float diag = pow(clamp((-pn.x - pn.y + 0.30) / 2.2, 0.0, 1.0), 2.4);\n" +
         "    float frostCurve = pow(clamp(uFrost, 0.0, 1.0), 1.15);\n" +
-        "    float drawerTintMod = mix(1.0, mix(0.28, 0.88, frostCurve), uDrawerMode);\n" +
+        "    float drawerTintMod = mix(1.0, mix(0.32, 0.88, frostCurve), uDrawerMode);\n" +
         "    float baseFrost = (0.50 * frostCurve) * mix(1.0, 0.78, brightClamp);\n" +
-        "    float bodyAlpha = (baseFrost + (0.09 * frostCurve) * topCatch + (0.008 + 0.055 * frostCurve) * edgeMeniscus + (0.065 * frostCurve) * diag) * drawerTintMod;\n" +
+        "    float drawerSheen = uDrawerMode * (0.032 * edgeMeniscus + 0.022 * topCatch);\n" +
+        "    float bodyAlpha = (baseFrost + (0.09 * frostCurve) * topCatch + (0.008 + 0.055 * frostCurve) * edgeMeniscus + (0.065 * frostCurve) * diag) * drawerTintMod + drawerSheen;\n" +
         "    bodyAlpha = clamp(bodyAlpha, 0.0, 0.64);\n" +
         "    half3 glassTint = half3(0.985 + 0.015 * diag, 0.992 + 0.008 * diag, 1.0);\n" +
         "    col = mix(col, glassTint, half(bodyAlpha));\n" +
@@ -397,8 +401,14 @@ public final class LiquidGlassRuntime {
         }
         sCaptureFailedPermanently = false;
         sConsecutiveFails = 0;
-        sLastHomeDrawMs = System.currentTimeMillis();
-        // Detect static/live wallpaper changes cleanly WITHOUT nulling the old shader (zero 1-frame flash!)
+        long now = System.currentTimeMillis();
+        sLastHomeDrawMs = now;
+        // Grace period during One UI's app-close / swipe-up-to-home spring animation (~340ms):
+        // Keep the clean cached wallpaper shader locked while the closing app & wallpaper zoom-out settle,
+        // preventing any 1-second broken/dimmed frame capture during app close!
+        if (sHomeWallShader != null) {
+            sLastMotionMs = Math.max(sLastMotionMs, now + 240L);
+        }
         boolean needRefresh = sUsedFallbackCapture;
         try {
             if (sAppCtx != null && Build.VERSION.SDK_INT >= 24) {
@@ -636,8 +646,13 @@ public final class LiquidGlassRuntime {
             System.arraycopy(rawPx, 0, outPx, 0, w * h);
         } else if (passes <= 1) {
             boxBlurPass(rawPx, outPx, w, h, radius, dimDrawer);
-        } else {
+        } else if (passes == 2) {
             boxBlurPass(rawPx, sTmpB, w, h, radius, false);
+            boxBlurPass(sTmpB, outPx, w, h, radius, dimDrawer);
+        } else {
+            // 3-pass separable box blur = 99.5% true Gaussian (zero directional banding in App Drawer!)
+            boxBlurPass(rawPx, outPx, w, h, radius, false);
+            boxBlurPass(outPx, sTmpB, w, h, radius, false);
             boxBlurPass(sTmpB, outPx, w, h, radius, dimDrawer);
         }
         // Double-buffered mutable Bitmap pool -> ZERO per-frame Bitmap GC churn and 100% RenderThread-safe!
@@ -936,7 +951,7 @@ public final class LiquidGlassRuntime {
                     tiny.recycle();
                     updateAutoTintFromPixels(drawerRaw, dw * dh);
                     if (needDrawer) {
-                        Bitmap drawerBmp = buildPreBlurredBitmap(drawerRaw, dw, dh, 8, 2, true);
+                        Bitmap drawerBmp = buildPreBlurredBitmap(drawerRaw, dw, dh, 7, 3, true);
                         sDrawerWallScaleX = dw / (float) sw;
                         sDrawerWallScaleY = dh / (float) sh;
                         sDrawerWallShader = makeLinearShader(drawerBmp);
@@ -1033,6 +1048,7 @@ public final class LiquidGlassRuntime {
     public static void drawLiveLiquidBody(Context ctx, View hostView, Canvas canvas,
                                           float left, float top, float width, float height,
                                           float screenX, float screenY,
+                                          float viewScaleX, float viewScaleY,
                                           float tiltX, float tiltY,
                                           float strength, float frost01, boolean isAppDrawer,
                                           int tintColor, float tintStrength) {
@@ -1072,9 +1088,12 @@ public final class LiquidGlassRuntime {
                     sLensShader = new RuntimeShader(APPLE_LIQUID_LENS_AGSL);
                     sLensPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
                 }
+                float vsx = (viewScaleX > 0.1f && viewScaleX < 4.0f) ? viewScaleX : 1.0f;
+                float vsy = (viewScaleY > 0.1f && viewScaleY < 4.0f) ? viewScaleY : 1.0f;
                 sLensShader.setInputShader("uWallpaper", wall);
                 sLensShader.setFloatUniform("uSize", width, height);
                 sLensShader.setFloatUniform("uScreenPos", screenX, screenY);
+                sLensShader.setFloatUniform("uViewScale", vsx, vsy);
                 sLensShader.setFloatUniform("uWallScale",
                         useDrawerShader ? sDrawerWallScaleX : sWallScaleX,
                         useDrawerShader ? sDrawerWallScaleY : sWallScaleY);

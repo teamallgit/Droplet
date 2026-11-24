@@ -179,8 +179,8 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.droplet.iconpack"
-    android:versionCode="25"
-    android:versionName="2.8.2">
+    android:versionCode="26"
+    android:versionName="2.9.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 
