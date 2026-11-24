@@ -64,12 +64,14 @@ public final class DropletHook implements IXposedHookLoadPackage {
     private static volatile Map<String, String> sCompMap;
     private static volatile Map<String, String> sPkgMap;
     private static volatile Map<String, String> sLabelToDrawableMap;
+    private static volatile Map<String, ComponentName> sLabelToComponentMap;
     private static final Map<String, Bitmap> sPureGlyphCache = new ConcurrentHashMap<>();
     private static final Map<String, Bitmap> sFullIconCache = new ConcurrentHashMap<>();
     private static final Set<View> sActiveIcons = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Set<View> sAllIconViews = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<View, Drawable> sOriginalIcons = new WeakHashMap<>();
     private static final Map<View, Bitmap> sCompleteGlassBitmaps = new WeakHashMap<>();
+    private static final Map<View, Drawable> sLazyCheckedIcons = new WeakHashMap<>();
     private static final Map<View, long[]> sLastIconPos = new WeakHashMap<>();
     private static final Map<View, Boolean> sDrawerIconCache = new WeakHashMap<>();
     private static final Map<View, ViewParent> sDrawerParentCache = new WeakHashMap<>();
@@ -570,6 +572,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
         if (v == null || d == null) return;
         try {
             sInSetIcon.set(Boolean.TRUE);
+            enterInternalIconOp();
             Drawable cur = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
             if (cur != null && !cur.getBounds().isEmpty()) {
                 d.setBounds(cur.getBounds());
@@ -587,6 +590,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
             v.invalidate();
         } catch (Throwable ignored) {
         } finally {
+            exitInternalIconOp();
             sInSetIcon.set(Boolean.FALSE);
         }
     }
@@ -601,6 +605,9 @@ public final class DropletHook implements IXposedHookLoadPackage {
             @Override
             public void run() {
                 boolean wantLiquid = isEnabled() && opt(ModuleStatus.KEY_LIQUID_ICONS, true);
+                synchronized (sLazyCheckedIcons) {
+                    sLazyCheckedIcons.clear();
+                }
                 List<View> views;
                 synchronized (sAllIconViews) {
                     views = new ArrayList<>(sAllIconViews);
@@ -630,9 +637,13 @@ public final class DropletHook implements IXposedHookLoadPackage {
                                 Bitmap[] fullOut = new Bitmap[1];
                                 Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, src, sz, true, fullOut);
                                 if (themed != null) {
-                                    if (fullOut[0] != null) {
+                                    if (themed instanceof LiquidGlassRuntime.PureGlyphDrawable && fullOut[0] != null) {
                                         synchronized (sCompleteGlassBitmaps) {
                                             sCompleteGlassBitmaps.put(v, fullOut[0]);
+                                        }
+                                    } else {
+                                        synchronized (sCompleteGlassBitmaps) {
+                                            sCompleteGlassBitmaps.remove(v);
                                         }
                                     }
                                     applyIconSafe(v, themed);
@@ -674,6 +685,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
             Map<String, String> compMap = new ConcurrentHashMap<>();
             Map<String, String> pkgMap = new ConcurrentHashMap<>();
             Map<String, String> labelMap = new ConcurrentHashMap<>();
+            Map<String, ComponentName> labelCompMap = new ConcurrentHashMap<>();
 
             int xmlId = res.getIdentifier("appfilter", "xml", ModuleStatus.PKG);
             if (xmlId != 0) {
@@ -706,16 +718,21 @@ public final class DropletHook implements IXposedHookLoadPackage {
                 for (ResolveInfo ri : apps) {
                     String p = ri.activityInfo.packageName;
                     String c = ri.activityInfo.name;
+                    ComponentName cnObj = new ComponentName(p, c);
+                    CharSequence lbl = ri.loadLabel(pm);
+                    String key = null;
+                    String normKey = null;
+                    if (lbl != null && lbl.length() > 0) {
+                        key = lbl.toString().trim().toLowerCase(Locale.ROOT);
+                        if (!labelCompMap.containsKey(key)) labelCompMap.put(key, cnObj);
+                        normKey = normalizeLabelKey(key);
+                        if (normKey.length() >= 3 && !labelCompMap.containsKey(normKey)) labelCompMap.put(normKey, cnObj);
+                    }
                     String draw = compMap.get(p + "/" + c);
                     if (draw == null) draw = pkgMap.get(p);
-                    if (draw != null) {
-                        CharSequence lbl = ri.loadLabel(pm);
-                        if (lbl != null && lbl.length() > 0) {
-                            String key = lbl.toString().trim().toLowerCase(Locale.ROOT);
-                            if (!labelMap.containsKey(key)) labelMap.put(key, draw);
-                            String normKey = normalizeLabelKey(key);
-                            if (normKey.length() >= 3 && !labelMap.containsKey(normKey)) labelMap.put(normKey, draw);
-                        }
+                    if (draw != null && key != null) {
+                        if (!labelMap.containsKey(key)) labelMap.put(key, draw);
+                        if (normKey != null && normKey.length() >= 3 && !labelMap.containsKey(normKey)) labelMap.put(normKey, draw);
                     }
                 }
             } catch (Throwable ignored) {}
@@ -724,6 +741,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
             sCompMap = compMap;
             sPkgMap = pkgMap;
             sLabelToDrawableMap = labelMap;
+            sLabelToComponentMap = labelCompMap;
         } catch (Throwable t) {
             XposedBridge.log(TAG + "Failed loading Droplet resources: " + t);
         }
@@ -848,18 +866,73 @@ public final class DropletHook implements IXposedHookLoadPackage {
             }
         }
 
-        // If Theme Park Droplet is active and live refraction is ON, strip the static plate from orig too!
+        // If DragController / FloatingAnimator passes our CompleteGlassDrawable back into setIcon,
+        // immediately restore live PureGlyphDrawable refraction!
+        if (liveRefraction && orig instanceof LiquidGlassRuntime.CompleteGlassDrawable) {
+            Bitmap origBmp = ((BitmapDrawable) orig).getBitmap();
+            if (origBmp != null && !origBmp.isRecycled()) {
+                if (outFullBmp != null && outFullBmp.length > 0) {
+                    outFullBmp[0] = origBmp;
+                }
+                Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(origBmp);
+                if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
+            }
+        }
+
+        // If Theme Park Droplet is active and live refraction is ON:
+        // - If the icon has a genuine non-empty glyph (e.g. a themed icon whose label/component wasn't bound yet),
+        //   extractPureGlyphFromDroplet returns a crisp PureGlyphDrawable (never blank!).
+        // - If it's an unrecognised app mangled/erased by an older Theme Park fallback mask (extractPureGlyphFromDroplet == null),
+        //   automatically load its genuine untouched stock icon straight from the app's own APK resources!
         if (liveRefraction && orig instanceof BitmapDrawable && ((BitmapDrawable) orig).getBitmap() != null
                 && LiquidGlassRuntime.isAlreadyTranslucentGlass(orig)) {
             Bitmap origBmp = ((BitmapDrawable) orig).getBitmap();
-            if (outFullBmp != null && outFullBmp.length > 0) {
-                outFullBmp[0] = origBmp;
-            }
             Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(origBmp);
-            if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
+            if (pure != null) {
+                if (outFullBmp != null && outFullBmp.length > 0) {
+                    outFullBmp[0] = origBmp;
+                }
+                return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
+            }
+            // Mangled/blank Theme Park fallback for an unrecognised app -> restore real crisp stock icon!
+            Drawable stock = loadGenuineStockIcon(ctx, cn, labelKey);
+            if (stock != null) return stock;
         }
 
         // Unrecognised app not covered by Droplet -> return null so the regular stock icon stays 100% intact & visible!
+        return null;
+    }
+
+    /**
+     * Loads an app's genuine untouched stock icon directly from its own APK resources,
+     * bypassing any broken Samsung Theme Park fallback overlay for unrecognised apps.
+     */
+    private static Drawable loadGenuineStockIcon(Context ctx, ComponentName cn, String labelKey) {
+        if (ctx == null) return null;
+        ComponentName target = cn;
+        if (target == null && labelKey != null && sLabelToComponentMap != null) {
+            target = sLabelToComponentMap.get(labelKey);
+            if (target == null) {
+                String normKey = normalizeLabelKey(labelKey);
+                if (normKey.length() >= 3) target = sLabelToComponentMap.get(normKey);
+            }
+        }
+        if (target == null) return null;
+        try {
+            PackageManager pm = ctx.getPackageManager();
+            int iconRes = 0;
+            try {
+                iconRes = pm.getActivityInfo(target, 0).getIconResource();
+            } catch (Throwable ignored) {}
+            if (iconRes == 0) {
+                iconRes = pm.getApplicationInfo(target.getPackageName(), 0).icon;
+            }
+            if (iconRes != 0) {
+                Resources appRes = pm.getResourcesForApplication(target.getPackageName());
+                int dpi = ctx.getResources().getDisplayMetrics().densityDpi;
+                return appRes.getDrawableForDensity(iconRes, dpi, null);
+            }
+        } catch (Throwable ignored) {}
         return null;
     }
 
@@ -930,7 +1003,12 @@ public final class DropletHook implements IXposedHookLoadPackage {
                     exitInternalIconOp();
                 }
             };
-            for (String mName : new String[] { "clearIconColorFilter", "onLayout", "onMeasure" }) {
+            for (String mName : new String[] {
+                    "setIconIntoPosition", "clearIconColorFilter", "clear",
+                    "getFolderTransformAnim", "getOutlineBitmap",
+                    "onLayout", "onMeasure", "setItemStyle", "setIconState",
+                    "onStartDragAnimation", "onEndDragAnimation"
+            }) {
                 try {
                     XposedBridge.hookAllMethods(iconViewCls, mName, internalOpGuard);
                 } catch (Throwable ignored) {}
@@ -954,7 +1032,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
                 });
             } catch (Throwable ignored) {}
 
-            // Return complete Liquid Glass BitmapDrawable to external callers (e.g. FloatingAnimator fly-home icon!)
+            // Return complete Liquid Glass icon to external callers (e.g. FloatingAnimator fly-home icon!)
             try {
                 XposedBridge.hookAllMethods(iconViewCls, "getIcon", new XC_MethodHook() {
                     @Override
@@ -971,10 +1049,8 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         }
                         if (fullBmp == null || fullBmp.isRecycled()) return;
                         Drawable cur = (Drawable) res;
-                        BitmapDrawable fullDrawable = new BitmapDrawable(v.getResources(), fullBmp);
-                        fullDrawable.setFilterBitmap(true);
-                        fullDrawable.setAntiAlias(true);
-                        fullDrawable.setDither(true);
+                        LiquidGlassRuntime.CompleteGlassDrawable fullDrawable =
+                                new LiquidGlassRuntime.CompleteGlassDrawable(v.getResources(), fullBmp);
                         fullDrawable.setBounds(cur.getBounds());
                         fullDrawable.setAlpha(cur.getAlpha());
                         param.setResult(fullDrawable);
@@ -999,7 +1075,11 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         synchronized (sAllIconViews) {
                             sAllIconViews.add(v);
                         }
-                        if (!(orig instanceof LiquidGlassRuntime.PureGlyphDrawable)) {
+                        synchronized (sLazyCheckedIcons) {
+                            sLazyCheckedIcons.remove(v);
+                        }
+                        if (!(orig instanceof LiquidGlassRuntime.PureGlyphDrawable)
+                                && !(orig instanceof LiquidGlassRuntime.CompleteGlassDrawable)) {
                             synchronized (sOriginalIcons) {
                                 sOriginalIcons.put(v, orig);
                             }
@@ -1014,15 +1094,23 @@ public final class DropletHook implements IXposedHookLoadPackage {
 
                         try {
                             sInSetIcon.set(Boolean.TRUE);
+                            enterInternalIconOp();
                             ComponentName cn = extractComponent(param.thisObject);
                             String lbl = extractLabel(param.thisObject);
                             int sz = Math.max(orig.getIntrinsicWidth(), 192);
                             Bitmap[] fullOut = new Bitmap[1];
                             Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, orig, sz, true, fullOut);
                             if (themed != null) {
-                                if (fullOut[0] != null) {
+                                if (themed instanceof LiquidGlassRuntime.PureGlyphDrawable && fullOut[0] != null) {
                                     synchronized (sCompleteGlassBitmaps) {
                                         sCompleteGlassBitmaps.put(v, fullOut[0]);
+                                    }
+                                } else {
+                                    synchronized (sCompleteGlassBitmaps) {
+                                        sCompleteGlassBitmaps.remove(v);
+                                    }
+                                    synchronized (sOriginalIcons) {
+                                        sOriginalIcons.put(v, themed);
                                     }
                                 }
                                 themed.setBounds(orig.getBounds());
@@ -1034,6 +1122,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
                             }
                         } catch (Throwable ignored) {
                         } finally {
+                            exitInternalIconOp();
                             sInSetIcon.set(Boolean.FALSE);
                         }
                     }
@@ -1057,6 +1146,46 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         try {
                             TextView tv = (TextView) param.thisObject;
                             Drawable icon = getIconFromView(tv);
+                            // Lazy recovery: if HoneySpace bound setIcon before tag/label (e.g. after drag-and-drop),
+                            // or passed a static CompleteGlassDrawable, re-apply live refraction once!
+                            if (icon != null && !(icon instanceof LiquidGlassRuntime.PureGlyphDrawable)) {
+                                Drawable prevChecked;
+                                synchronized (sLazyCheckedIcons) {
+                                    prevChecked = sLazyCheckedIcons.get(tv);
+                                }
+                                if (prevChecked != icon) {
+                                    ComponentName cn = extractComponent(tv);
+                                    String lbl = extractLabel(tv);
+                                    if (cn != null || lbl != null || icon instanceof LiquidGlassRuntime.CompleteGlassDrawable) {
+                                        synchronized (sLazyCheckedIcons) {
+                                            sLazyCheckedIcons.put(tv, icon);
+                                        }
+                                        Bitmap[] fullOut = new Bitmap[1];
+                                        Drawable themed = prepareGlyphDrawable(
+                                                tv.getContext(), cn, lbl, icon,
+                                                Math.max(icon.getIntrinsicWidth(), 192), true, fullOut);
+                                        if (themed != null) {
+                                            if (themed instanceof LiquidGlassRuntime.PureGlyphDrawable && fullOut[0] != null) {
+                                                synchronized (sCompleteGlassBitmaps) {
+                                                    sCompleteGlassBitmaps.put(tv, fullOut[0]);
+                                                }
+                                            } else {
+                                                synchronized (sCompleteGlassBitmaps) {
+                                                    sCompleteGlassBitmaps.remove(tv);
+                                                }
+                                                synchronized (sOriginalIcons) {
+                                                    sOriginalIcons.put(tv, themed);
+                                                }
+                                                synchronized (sLazyCheckedIcons) {
+                                                    sLazyCheckedIcons.put(tv, themed);
+                                                }
+                                            }
+                                            applyIconSafe(tv, themed);
+                                            icon = themed;
+                                        }
+                                    }
+                                }
+                            }
                             // Leave unrecognised stock icons untouched, and skip hidden slots during FloatingAnimator app-close!
                             if (!(icon instanceof LiquidGlassRuntime.PureGlyphDrawable)) return;
                             if (isIconHidden(tv, icon)) return;

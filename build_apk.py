@@ -42,11 +42,7 @@ def generate_appfilter_xml(rows, extra_rows=None):
         '<?xml version="1.0" encoding="utf-8"?>',
         '<resources>',
         '',
-        '    <!-- Fallback Liquid Glass framing for any unthemed future apps -->',
-        '    <iconback img1="ic_glass_back" />',
-        '    <iconmask img1="ic_glass_mask" />',
-        '    <iconupon img1="ic_glass_upon" />',
-        '    <scale factor="0.72" />',
+        '    <!-- Unrecognised apps stay on their crisp regular stock icons (no fallback mask) -->',
         '',
         '    <!-- Generic launcher shortcuts -->',
         '    <item component=":BROWSER" drawable="ios_safari" />',
@@ -179,8 +175,8 @@ def generate_manifest():
     return """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.droplet.iconpack"
-    android:versionCode="28"
-    android:versionName="2.9.2">
+    android:versionCode="29"
+    android:versionName="2.9.3">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
 

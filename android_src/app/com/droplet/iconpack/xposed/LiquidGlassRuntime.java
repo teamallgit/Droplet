@@ -72,6 +72,20 @@ public final class LiquidGlassRuntime {
         }
     }
 
+    /**
+     * Complete baked Liquid Glass icon returned ONLY to external transition/drag callers
+     * (e.g. FloatingAnimator) via IconViewImpl.getIcon() so flying icons keep their glass body
+     * without ever being mistaken for a stock icon if passed back into setIcon().
+     */
+    public static final class CompleteGlassDrawable extends BitmapDrawable {
+        public CompleteGlassDrawable(Resources res, Bitmap bitmap) {
+            super(res, bitmap);
+            setFilterBitmap(true);
+            setAntiAlias(true);
+            setDither(true);
+        }
+    }
+
     // Engine A: Ultra-Smooth Retina-AA Optical Convex Magnification + Refraction Shader
     // (Zero hard edge branches, C1-smooth cubic AA boundary, 1-tap center / 3-tap bevel -> 120fps!)
     private static final String APPLE_LIQUID_LENS_AGSL =
@@ -1223,6 +1237,7 @@ public final class LiquidGlassRuntime {
         float rx = w * 0.44f;
         float ry = h * 0.44f;
 
+        int keptInnerPx = 0;
         for (int y = 0; y < h; y++) {
             float dy = Math.abs(y - cy) / ry;
             float dy4 = dy * dy * dy * dy;
@@ -1245,8 +1260,13 @@ public final class LiquidGlassRuntime {
                 float glyphA = (a < 155) ? ((a - 105f) / 50f * 155f) : a;
                 if (sDist > 0.94f) glyphA *= (1.0f - sDist) / 0.06f;
                 int outA = Math.max(0, Math.min(255, Math.round(glyphA * frostMul)));
+                if (outA > 24) keptInnerPx++;
                 px[row + x] = (outA << 24) | 0x00FFFFFF;
             }
+        }
+        // Safety guard: never return an empty/blank transparent glyph (e.g. from a mangled fallback icon)!
+        if (keptInnerPx < Math.max(24, (w * h) / 140)) {
+            return null;
         }
         Bitmap raw = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         raw.setPixels(px, 0, w, 0, 0, w, h);
