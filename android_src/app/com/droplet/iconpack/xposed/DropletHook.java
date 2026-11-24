@@ -72,13 +72,25 @@ public final class DropletHook implements IXposedHookLoadPackage {
     private static final Map<View, Boolean> sDrawerIconCache = new WeakHashMap<>();
     private static final Map<View, ViewParent> sDrawerParentCache = new WeakHashMap<>();
     private static final Set<View> sHookedRoots = Collections.newSetFromMap(new WeakHashMap<>());
-    private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
+    private static volatile Handler sMainHandler;
     private static final Runnable sInvalidateRunnable = new Runnable() {
         @Override
         public void run() {
             invalidateVisibleIconsOnUiThread();
         }
     };
+
+    private static Handler getMainHandler() {
+        Handler h = sMainHandler;
+        if (h == null) {
+            Looper ml = Looper.getMainLooper();
+            if (ml != null) {
+                h = new Handler(ml);
+                sMainHandler = h;
+            }
+        }
+        return h;
+    }
     private static final AtomicInteger sHomeHooks = new AtomicInteger(0);
     private static final AtomicInteger sSysUiHooks = new AtomicInteger(0);
     private static final ThreadLocal<Boolean> sInSetIcon = new ThreadLocal<>();
@@ -485,11 +497,15 @@ public final class DropletHook implements IXposedHookLoadPackage {
     }
 
     private static void invalidateVisibleIcons() {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        Looper ml = Looper.getMainLooper();
+        if (ml != null && Looper.myLooper() == ml) {
             invalidateVisibleIconsOnUiThread();
         } else {
-            sMainHandler.removeCallbacks(sInvalidateRunnable);
-            sMainHandler.post(sInvalidateRunnable);
+            Handler h = getMainHandler();
+            if (h != null) {
+                h.removeCallbacks(sInvalidateRunnable);
+                h.post(sInvalidateRunnable);
+            }
         }
     }
 
@@ -579,10 +595,12 @@ public final class DropletHook implements IXposedHookLoadPackage {
                 }
             }
         };
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        Looper ml = Looper.getMainLooper();
+        if (ml != null && Looper.myLooper() == ml) {
             r.run();
         } else {
-            sMainHandler.post(r);
+            Handler h = getMainHandler();
+            if (h != null) h.post(r);
         }
     }
 
