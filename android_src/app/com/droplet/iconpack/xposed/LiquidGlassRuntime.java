@@ -1051,8 +1051,8 @@ public final class LiquidGlassRuntime {
                                           float viewScaleX, float viewScaleY,
                                           float tiltX, float tiltY,
                                           float strength, float frost01, boolean isAppDrawer,
-                                          int tintColor, float tintStrength) {
-        if (width < 16f || height < 16f || Build.VERSION.SDK_INT < 33) return;
+                                          int tintColor, float tintStrength, int alpha255) {
+        if (width < 16f || height < 16f || alpha255 <= 4 || Build.VERSION.SDK_INT < 33) return;
 
         if (sAppCtx == null && ctx != null) {
             sAppCtx = ctx.getApplicationContext() != null ? ctx.getApplicationContext() : ctx;
@@ -1081,6 +1081,7 @@ public final class LiquidGlassRuntime {
 
         boolean useDrawerShader = isAppDrawer && (sDrawerWallShader != null);
         BitmapShader wall = useDrawerShader ? sDrawerWallShader : sHomeWallShader;
+        int clampedAlpha = Math.max(0, Math.min(255, alpha255));
 
         if (wall != null && !sLensFailed) {
             try {
@@ -1104,6 +1105,7 @@ public final class LiquidGlassRuntime {
                 sLensShader.setFloatUniform("uTintColor", tR, tG, tB);
                 sLensShader.setFloatUniform("uTintStrength", tStr);
                 sLensPaint.setShader(sLensShader);
+                sLensPaint.setAlpha(clampedAlpha);
 
                 canvas.save();
                 canvas.translate(left, top);
@@ -1147,6 +1149,7 @@ public final class LiquidGlassRuntime {
                 sClearShader.setFloatUniform("uTintColor", tR, tG, tB);
                 sClearShader.setFloatUniform("uTintStrength", tStr);
                 sClearPaint.setShader(sClearShader);
+                sClearPaint.setAlpha(clampedAlpha);
 
                 canvas.save();
                 canvas.translate(left, top);
@@ -1160,7 +1163,13 @@ public final class LiquidGlassRuntime {
 
     public static void drawLiveGlazeRim(Canvas canvas, float left, float top, float width, float height,
                                         float tiltX, float tiltY, boolean isPill, float intensity) {
-        if (width < 12f || height < 12f || intensity <= 0.01f) return;
+        drawLiveGlazeRim(canvas, left, top, width, height, tiltX, tiltY, isPill, intensity, 255);
+    }
+
+    public static void drawLiveGlazeRim(Canvas canvas, float left, float top, float width, float height,
+                                        float tiltX, float tiltY, boolean isPill, float intensity, int alpha255) {
+        if (width < 12f || height < 12f || intensity <= 0.01f || alpha255 <= 4) return;
+        int clampedAlpha = Math.max(0, Math.min(255, alpha255));
         if (Build.VERSION.SDK_INT >= 33 && !sRimFailed) {
             try {
                 if (sRimShader == null) {
@@ -1172,6 +1181,7 @@ public final class LiquidGlassRuntime {
                 sRimShader.setFloatUniform("uCornerRatio", isPill ? 0.48f : 0.23f);
                 sRimShader.setFloatUniform("uIntensity", intensity);
                 sRimPaint.setShader(sRimShader);
+                sRimPaint.setAlpha(clampedAlpha);
 
                 canvas.save();
                 canvas.translate(left, top);

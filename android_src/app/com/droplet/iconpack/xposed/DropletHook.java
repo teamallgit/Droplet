@@ -35,6 +35,7 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -68,6 +69,7 @@ public final class DropletHook implements IXposedHookLoadPackage {
     private static final Set<View> sActiveIcons = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Set<View> sAllIconViews = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<View, Drawable> sOriginalIcons = new WeakHashMap<>();
+    private static final Map<View, Bitmap> sCompleteGlassBitmaps = new WeakHashMap<>();
     private static final Map<View, long[]> sLastIconPos = new WeakHashMap<>();
     private static final Map<View, Boolean> sDrawerIconCache = new WeakHashMap<>();
     private static final Map<View, ViewParent> sDrawerParentCache = new WeakHashMap<>();
@@ -94,6 +96,45 @@ public final class DropletHook implements IXposedHookLoadPackage {
     private static final AtomicInteger sHomeHooks = new AtomicInteger(0);
     private static final AtomicInteger sSysUiHooks = new AtomicInteger(0);
     private static final ThreadLocal<Boolean> sInSetIcon = new ThreadLocal<>();
+    private static final ThreadLocal<Integer> sInternalIconOpDepth = new ThreadLocal<>();
+    private static volatile Class<?> sIconViewCls;
+    private static volatile Method sGetInvisibleStateMethod;
+
+    private static void enterInternalIconOp() {
+        Integer d = sInternalIconOpDepth.get();
+        sInternalIconOpDepth.set(d == null ? 1 : (d + 1));
+    }
+
+    private static void exitInternalIconOp() {
+        Integer d = sInternalIconOpDepth.get();
+        if (d == null || d <= 1) {
+            sInternalIconOpDepth.set(0);
+        } else {
+            sInternalIconOpDepth.set(d - 1);
+        }
+    }
+
+    private static boolean isInInternalIconOp() {
+        Integer d = sInternalIconOpDepth.get();
+        return d != null && d > 0;
+    }
+
+    private static int getInvisibleState(View v) {
+        Method m = sGetInvisibleStateMethod;
+        Class<?> cls = sIconViewCls;
+        if (v == null || m == null || cls == null || !cls.isInstance(v)) return 0;
+        try {
+            Object res = m.invoke(v);
+            if (res instanceof Integer) return (Integer) res;
+        } catch (Throwable ignored) {}
+        return 0;
+    }
+
+    private static boolean isIconHidden(View v, Drawable icon) {
+        if (v == null || v.getVisibility() != View.VISIBLE || v.getAlpha() <= 0.05f) return true;
+        if (icon != null && icon.getAlpha() <= 15) return true;
+        return getInvisibleState(v) != 0;
+    }
 
     // Cached preferences (zero stat()/disk syscalls during onDraw or onPreDraw!)
     private static volatile boolean sPrefsInit = false;
@@ -428,13 +469,11 @@ public final class DropletHook implements IXposedHookLoadPackage {
             sx *= v.getScaleX();
             sy *= v.getScaleY();
             ViewParent p = v.getParent();
-            int depth = 0;
-            while (p instanceof View && depth < 8) {
+            while (p instanceof View) {
                 View pv = (View) p;
                 sx *= pv.getScaleX();
                 sy *= pv.getScaleY();
                 p = pv.getParent();
-                depth++;
             }
         }
         outScale[0] = (sx > 0.1f && sx < 4.0f) ? sx : 1.0f;
@@ -575,6 +614,9 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         orig = sOriginalIcons.get(v);
                     }
                     if (!wantLiquid) {
+                        synchronized (sCompleteGlassBitmaps) {
+                            sCompleteGlassBitmaps.remove(v);
+                        }
                         if (cur instanceof LiquidGlassRuntime.PureGlyphDrawable && orig != null) {
                             applyIconSafe(v, orig);
                         }
@@ -585,9 +627,19 @@ public final class DropletHook implements IXposedHookLoadPackage {
                                 ComponentName cn = extractComponent(v);
                                 String lbl = extractLabel(v);
                                 int sz = Math.max(src.getIntrinsicWidth(), 192);
-                                Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, src, sz, true);
+                                Bitmap[] fullOut = new Bitmap[1];
+                                Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, src, sz, true, fullOut);
                                 if (themed != null) {
+                                    if (fullOut[0] != null) {
+                                        synchronized (sCompleteGlassBitmaps) {
+                                            sCompleteGlassBitmaps.put(v, fullOut[0]);
+                                        }
+                                    }
                                     applyIconSafe(v, themed);
+                                } else {
+                                    synchronized (sCompleteGlassBitmaps) {
+                                        sCompleteGlassBitmaps.remove(v);
+                                    }
                                 }
                             }
                         }
@@ -740,8 +792,11 @@ public final class DropletHook implements IXposedHookLoadPackage {
     /**
      * Loads a pure floating frosted-white glyph (stripping any static baked plate/rim when
      * live AGSL refraction is enabled, so the live GPU refracting droplet acts as the icon plate!).
+     * Also outputs the complete static Liquid Glass Bitmap via outFullBmp[0] so FloatingAnimator
+     * renders a complete Liquid Glass icon during app-open/app-close fly animations!
      */
-    private static Drawable prepareGlyphDrawable(Context ctx, ComponentName cn, String labelKey, Drawable orig, int iconPx, boolean liveRefraction) {
+    private static Drawable prepareGlyphDrawable(Context ctx, ComponentName cn, String labelKey, Drawable orig,
+                                                 int iconPx, boolean liveRefraction, Bitmap[] outFullBmp) {
         if (orig instanceof LiquidGlassRuntime.PureGlyphDrawable) return null;
 
         ensureIconPackLoaded(ctx);
@@ -761,36 +816,33 @@ public final class DropletHook implements IXposedHookLoadPackage {
                 }
             }
             if (drawName != null) {
+                Bitmap full = sFullIconCache.get(drawName);
+                if (full == null) {
+                    int id = res.getIdentifier(drawName, "drawable", ModuleStatus.PKG);
+                    if (id != 0) {
+                        Drawable d = res.getDrawable(id, null);
+                        if (d instanceof BitmapDrawable && ((BitmapDrawable) d).getBitmap() != null) {
+                            full = ((BitmapDrawable) d).getBitmap();
+                            sFullIconCache.put(drawName, full);
+                        }
+                    }
+                }
+                if (outFullBmp != null && outFullBmp.length > 0) {
+                    outFullBmp[0] = full;
+                }
                 if (liveRefraction) {
                     Bitmap pure = sPureGlyphCache.get(drawName);
-                    if (pure == null) {
-                        int id = res.getIdentifier(drawName, "drawable", ModuleStatus.PKG);
-                        if (id != 0) {
-                            Drawable d = res.getDrawable(id, null);
-                            if (d instanceof BitmapDrawable && ((BitmapDrawable) d).getBitmap() != null) {
-                                // Full-bleed icons (Notes, Maps, Clock) look best kept mostly intact; standard icons strip static plate!
-                                if ("ios_notes".equals(drawName) || "ios_maps".equals(drawName) || "ios_clock".equals(drawName)) {
-                                    pure = ((BitmapDrawable) d).getBitmap();
-                                } else {
-                                    pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(((BitmapDrawable) d).getBitmap());
-                                }
-                                if (pure != null) sPureGlyphCache.put(drawName, pure);
-                            }
+                    if (pure == null && full != null) {
+                        // Full-bleed icons (Notes, Maps, Clock) look best kept mostly intact; standard icons strip static plate!
+                        if ("ios_notes".equals(drawName) || "ios_maps".equals(drawName) || "ios_clock".equals(drawName)) {
+                            pure = full;
+                        } else {
+                            pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(full);
                         }
+                        if (pure != null) sPureGlyphCache.put(drawName, pure);
                     }
                     if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
                 } else {
-                    Bitmap full = sFullIconCache.get(drawName);
-                    if (full == null) {
-                        int id = res.getIdentifier(drawName, "drawable", ModuleStatus.PKG);
-                        if (id != 0) {
-                            Drawable d = res.getDrawable(id, null);
-                            if (d instanceof BitmapDrawable && ((BitmapDrawable) d).getBitmap() != null) {
-                                full = ((BitmapDrawable) d).getBitmap();
-                                sFullIconCache.put(drawName, full);
-                            }
-                        }
-                    }
                     if (full != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), full);
                 }
             }
@@ -799,7 +851,11 @@ public final class DropletHook implements IXposedHookLoadPackage {
         // If Theme Park Droplet is active and live refraction is ON, strip the static plate from orig too!
         if (liveRefraction && orig instanceof BitmapDrawable && ((BitmapDrawable) orig).getBitmap() != null
                 && LiquidGlassRuntime.isAlreadyTranslucentGlass(orig)) {
-            Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(((BitmapDrawable) orig).getBitmap());
+            Bitmap origBmp = ((BitmapDrawable) orig).getBitmap();
+            if (outFullBmp != null && outFullBmp.length > 0) {
+                outFullBmp[0] = origBmp;
+            }
+            Bitmap pure = LiquidGlassRuntime.extractPureGlyphFromDroplet(origBmp);
             if (pure != null) return new LiquidGlassRuntime.PureGlyphDrawable(ctx.getResources(), pure);
         }
 
@@ -856,6 +912,77 @@ public final class DropletHook implements IXposedHookLoadPackage {
         Class<?> iconViewCls = XposedHelpers.findClassIfExists("com.honeyspace.ui.common.iconview.IconViewImpl", cl);
         if (iconViewCls != null) {
             sHomeHooks.incrementAndGet();
+            sIconViewCls = iconViewCls;
+            try {
+                sGetInvisibleStateMethod = iconViewCls.getMethod("getInvisibleState");
+            } catch (Throwable ignored) {}
+
+            // Guard internal IconViewImpl ops so getIcon() returns the real PureGlyphDrawable internally,
+            // while external callers like FloatingAnimator receive the complete Liquid Glass icon!
+            XC_MethodHook internalOpGuard = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    enterInternalIconOp();
+                }
+
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    exitInternalIconOp();
+                }
+            };
+            for (String mName : new String[] { "clearIconColorFilter", "onLayout", "onMeasure" }) {
+                try {
+                    XposedBridge.hookAllMethods(iconViewCls, mName, internalOpGuard);
+                } catch (Throwable ignored) {}
+            }
+
+            // Invalidate immediately when FloatingAnimator toggles stationary icon visibility on app launch/close!
+            try {
+                XposedBridge.hookAllMethods(iconViewCls, "setIconVisible", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        enterInternalIconOp();
+                    }
+
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        exitInternalIconOp();
+                        if (param.thisObject instanceof View) {
+                            ((View) param.thisObject).invalidate();
+                        }
+                    }
+                });
+            } catch (Throwable ignored) {}
+
+            // Return complete Liquid Glass BitmapDrawable to external callers (e.g. FloatingAnimator fly-home icon!)
+            try {
+                XposedBridge.hookAllMethods(iconViewCls, "getIcon", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
+                        if (isInInternalIconOp() || Boolean.TRUE.equals(sInSetIcon.get())) return;
+                        if (!(param.thisObject instanceof View)) return;
+                        Object res = param.getResult();
+                        if (!(res instanceof LiquidGlassRuntime.PureGlyphDrawable)) return;
+                        View v = (View) param.thisObject;
+                        Bitmap fullBmp;
+                        synchronized (sCompleteGlassBitmaps) {
+                            fullBmp = sCompleteGlassBitmaps.get(v);
+                        }
+                        if (fullBmp == null || fullBmp.isRecycled()) return;
+                        Drawable cur = (Drawable) res;
+                        BitmapDrawable fullDrawable = new BitmapDrawable(v.getResources(), fullBmp);
+                        fullDrawable.setFilterBitmap(true);
+                        fullDrawable.setAntiAlias(true);
+                        fullDrawable.setDither(true);
+                        fullDrawable.setBounds(cur.getBounds());
+                        fullDrawable.setAlpha(cur.getAlpha());
+                        param.setResult(fullDrawable);
+                    }
+                });
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + "IconViewImpl.getIcon hook err: " + t);
+            }
 
             // 1. Always save original stock Drawable (so toggling OFF instantly restores stock icons!),
             //    and substitute pure floating frosted glyph when Liquid Glass is ON!
@@ -878,17 +1005,32 @@ public final class DropletHook implements IXposedHookLoadPackage {
                             }
                         }
 
-                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
+                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) {
+                            synchronized (sCompleteGlassBitmaps) {
+                                sCompleteGlassBitmaps.remove(v);
+                            }
+                            return;
+                        }
 
                         try {
                             sInSetIcon.set(Boolean.TRUE);
                             ComponentName cn = extractComponent(param.thisObject);
                             String lbl = extractLabel(param.thisObject);
                             int sz = Math.max(orig.getIntrinsicWidth(), 192);
-                            Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, orig, sz, true);
+                            Bitmap[] fullOut = new Bitmap[1];
+                            Drawable themed = prepareGlyphDrawable(v.getContext(), cn, lbl, orig, sz, true, fullOut);
                             if (themed != null) {
+                                if (fullOut[0] != null) {
+                                    synchronized (sCompleteGlassBitmaps) {
+                                        sCompleteGlassBitmaps.put(v, fullOut[0]);
+                                    }
+                                }
                                 themed.setBounds(orig.getBounds());
                                 param.args[0] = themed;
+                            } else {
+                                synchronized (sCompleteGlassBitmaps) {
+                                    sCompleteGlassBitmaps.remove(v);
+                                }
                             }
                         } catch (Throwable ignored) {
                         } finally {
@@ -908,14 +1050,16 @@ public final class DropletHook implements IXposedHookLoadPackage {
 
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
+                        enterInternalIconOp();
                         if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
                         if (!(param.thisObject instanceof TextView) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                         try {
                             TextView tv = (TextView) param.thisObject;
                             Drawable icon = getIconFromView(tv);
-                            // Leave unrecognised stock icons completely untouched & visible (no empty/broken glass!)
+                            // Leave unrecognised stock icons untouched, and skip hidden slots during FloatingAnimator app-close!
                             if (!(icon instanceof LiquidGlassRuntime.PureGlyphDrawable)) return;
+                            if (isIconHidden(tv, icon)) return;
                             registerActiveIcon(tv);
                             Canvas canvas = (Canvas) param.args[0];
                             int iw = icon.getBounds().width();
@@ -931,6 +1075,9 @@ public final class DropletHook implements IXposedHookLoadPackage {
 
                             tv.getLocationOnScreen(loc);
                             computeViewScale(tv, viewScale);
+                            if (Math.abs(viewScale[0] - 1.0f) > 0.005f || Math.abs(viewScale[1] - 1.0f) > 0.005f) {
+                                tv.postInvalidateOnAnimation();
+                            }
                             float screenX = loc[0] + left * viewScale[0];
                             float screenY = loc[1] + top * viewScale[1];
 
@@ -948,20 +1095,22 @@ public final class DropletHook implements IXposedHookLoadPackage {
                                     getFrostLevel(),
                                     isInBlurredContainer(tv),
                                     getTintColor(),
-                                    getTintStrength()
+                                    getTintStrength(),
+                                    icon.getAlpha()
                             );
                         } catch (Throwable ignored) {}
                     }
 
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
-                        if (!(param.thisObject instanceof TextView) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
-                        if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                         try {
+                            if (!isEnabled() || !opt(ModuleStatus.KEY_LIQUID_ICONS, true)) return;
+                            if (!(param.thisObject instanceof TextView) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
+                            if (param.thisObject.getClass().getSimpleName().contains("Folder")) return;
                             TextView tv = (TextView) param.thisObject;
                             Drawable icon = getIconFromView(tv);
                             if (!(icon instanceof LiquidGlassRuntime.PureGlyphDrawable)) return;
+                            if (isIconHidden(tv, icon)) return;
                             Canvas canvas = (Canvas) param.args[0];
                             int iw = icon.getBounds().width();
                             int ih = icon.getBounds().height();
@@ -982,8 +1131,11 @@ public final class DropletHook implements IXposedHookLoadPackage {
 
                             // Authentic iOS 26 retina-smooth corner-originating specular rim glow ON TOP!
                             float rimIntensity = getCornerGlowIntensity() * (isInBlurredContainer(tv) ? 0.90f : 1.0f);
-                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, rimIntensity);
-                        } catch (Throwable ignored) {}
+                            LiquidGlassRuntime.drawLiveGlazeRim(canvas, left, top, boxW, boxH, tx, ty, false, rimIntensity, icon.getAlpha());
+                        } catch (Throwable ignored) {
+                        } finally {
+                            exitInternalIconOp();
+                        }
                     }
                 });
             } catch (Throwable t) {
@@ -1006,9 +1158,10 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         try {
                             View v = (View) param.thisObject;
+                            Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
+                            if (isIconHidden(v, icon)) return;
                             registerActiveIcon(v);
                             Canvas c = (Canvas) param.args[0];
-                            Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
                             int iw = (icon != null && icon.getBounds().width() >= 32)
                                     ? icon.getBounds().width() : Math.round(Math.min(v.getWidth(), v.getHeight()) * 0.72f);
                             int ih = (icon != null && icon.getBounds().height() >= 32) ? icon.getBounds().height() : iw;
@@ -1018,14 +1171,18 @@ public final class DropletHook implements IXposedHookLoadPackage {
                             float top = v.getPaddingTop() + insetY;
                             v.getLocationOnScreen(loc);
                             computeViewScale(v, viewScale);
+                            if (Math.abs(viewScale[0] - 1.0f) > 0.005f || Math.abs(viewScale[1] - 1.0f) > 0.005f) {
+                                v.postInvalidateOnAnimation();
+                            }
                             float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
+                            int alpha255 = (icon != null) ? icon.getAlpha() : 255;
                             LiquidGlassRuntime.drawLiveLiquidBody(
                                     v.getContext(), v, c, left, top, iw - 2f * insetX, ih - 2f * insetY,
                                     loc[0] + left * viewScale[0], loc[1] + top * viewScale[1],
                                     viewScale[0], viewScale[1], tx, ty,
                                     getRefractionStrength(), getFrostLevel(), isInBlurredContainer(v),
-                                    getTintColor(), getTintStrength());
+                                    getTintColor(), getTintStrength(), alpha255);
                         } catch (Throwable ignored) {}
                     }
 
@@ -1035,8 +1192,9 @@ public final class DropletHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof View) || param.args.length == 0 || !(param.args[0] instanceof Canvas)) return;
                         try {
                             View v = (View) param.thisObject;
-                            Canvas c = (Canvas) param.args[0];
                             Drawable icon = (v instanceof TextView) ? getIconFromView((TextView) v) : null;
+                            if (isIconHidden(v, icon)) return;
+                            Canvas c = (Canvas) param.args[0];
                             int iw = (icon != null && icon.getBounds().width() >= 32)
                                     ? icon.getBounds().width() : Math.round(Math.min(v.getWidth(), v.getHeight()) * 0.72f);
                             int ih = (icon != null && icon.getBounds().height() >= 32) ? icon.getBounds().height() : iw;
@@ -1047,7 +1205,8 @@ public final class DropletHook implements IXposedHookLoadPackage {
                             float tx = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltX : 0f;
                             float ty = opt(ModuleStatus.KEY_GYRO_TILT, true) ? sTiltY : 0f;
                             float rimIntensity = getCornerGlowIntensity() * (isInBlurredContainer(v) ? 0.90f : 1.0f);
-                            LiquidGlassRuntime.drawLiveGlazeRim(c, left, top, iw - 2f * insetX, ih - 2f * insetY, tx, ty, false, rimIntensity);
+                            int alpha255 = (icon != null) ? icon.getAlpha() : 255;
+                            LiquidGlassRuntime.drawLiveGlazeRim(c, left, top, iw - 2f * insetX, ih - 2f * insetY, tx, ty, false, rimIntensity, alpha255);
                         } catch (Throwable ignored) {}
                     }
                 });
